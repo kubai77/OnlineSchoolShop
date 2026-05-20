@@ -1,3 +1,8 @@
+# 文件上传配置
+upload:
+  path: /usr/upload  # 图片上传保存的本地路径，可根据环境修改
+  path-pattern: /pictures/**  # 静态资源访问路径模式
+
 server:
   port: 8081
   servlet:

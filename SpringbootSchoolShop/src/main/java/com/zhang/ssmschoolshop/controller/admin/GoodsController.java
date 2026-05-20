@@ -3,6 +3,7 @@ package com.zhang.ssmschoolshop.controller.admin;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 
+import com.zhang.ssmschoolshop.config.UploadProperties;
 import com.zhang.ssmschoolshop.entity.*;
 import com.zhang.ssmschoolshop.service.CateService;
 import com.zhang.ssmschoolshop.service.GoodsService;
@@ -33,6 +34,9 @@ public class GoodsController {
 
     @Autowired
     private GoodsService goodsService;
+
+    @Autowired
+    private UploadProperties uploadProperties;
 
     @RequestMapping("/showjson")
     @ResponseBody
@@ -118,7 +122,7 @@ public class GoodsController {
         for (MultipartFile multipartFile : fileToUpload) {
             String fileName = goods.getGoodsname()+ multipartFile.getOriginalFilename();
             if (multipartFile != null) {
-               String ImagePath= ImageUtil.imagePath(multipartFile,fileName);
+               String ImagePath= ImageUtil.imagePath(multipartFile,fileName,uploadProperties.getPath());
                System.out.println("最后存入数据的图片名字为:"+ImagePath);
                 //把图片路径存入数据库中
               goodsService.addImagePath(new ImagePath(null, goods.getGoodsid(), ImagePath));

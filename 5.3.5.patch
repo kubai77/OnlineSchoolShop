@@ -1,0 +1,110 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..cbc299e 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,6 +1,7 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.context.annotation.Configuration;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+@@ -12,24 +13,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+  * @Description TODO
+  * @date 2019/5/10
+  * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
++ *      上传路径由 application.yml 中的 upload.path 配置驱动
+  **/
+ 
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
+-
++    @Autowired
++    private UploadProperties uploadProperties;
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+-        String os = System.getProperty("os.name");
+-        String pathPatterns="/pictures/**";
+-        String pathAbsolute="file:D:/upload/";
+-        if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            pathAbsolute="file:/usr/upload/";
+-        }
++        String pathPatterns = uploadProperties.getPathPattern();
++        String pathAbsolute = "file:" + uploadProperties.getPath() + "/";
+         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+ 
+     }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+index 03dd96a..055da5e 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+@@ -3,6 +3,7 @@ package com.zhang.ssmschoolshop.controller.admin;
+ import com.github.pagehelper.PageHelper;
+ import com.github.pagehelper.PageInfo;
+ 
++import com.zhang.ssmschoolshop.config.UploadProperties;
+ import com.zhang.ssmschoolshop.entity.*;
+ import com.zhang.ssmschoolshop.service.CateService;
+ import com.zhang.ssmschoolshop.service.GoodsService;
+@@ -34,6 +35,9 @@ public class GoodsController {
+     @Autowired
+     private GoodsService goodsService;
+ 
++    @Autowired
++    private UploadProperties uploadProperties;
++
+     @RequestMapping("/showjson")
+     @ResponseBody
+     public Msg getAllGoods(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) {
+@@ -118,7 +122,7 @@ public class GoodsController {
+         for (MultipartFile multipartFile : fileToUpload) {
+             String fileName = goods.getGoodsname()+ multipartFile.getOriginalFilename();
+             if (multipartFile != null) {
+-               String ImagePath= ImageUtil.imagePath(multipartFile,fileName);
++               String ImagePath= ImageUtil.imagePath(multipartFile,fileName,uploadProperties.getPath());
+                System.out.println("最后存入数据的图片名字为:"+ImagePath);
+                 //把图片路径存入数据库中
+               goodsService.addImagePath(new ImagePath(null, goods.getGoodsid(), ImagePath));
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+index cb668a4..9ef35c5 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+@@ -15,17 +15,12 @@ import java.util.UUID;
+  **/
+ public class ImageUtil {
+ 
+-    public static String imagePath(MultipartFile file, String shopName) {
++    public static String imagePath(MultipartFile file, String shopName, String uploadPath) {
+         if (file.isEmpty()) {
+             return "false";
+         }
+         int size = (int) file.getSize();
+-        String path = "D:/upload";
+-        String os = System.getProperty("os.name");
+-        if(!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            path="/usr/upload";
+-        }
++        String path = uploadPath;
+         String fileName=UUID.randomUUID().toString().substring(0,4)+shopName;
+         File dest = new File(path + "/" +fileName);
+         System.out.println("保存的绝对路径为:"+dest);
+diff --git a/SpringbootSchoolShop/src/main/resources/application.yml b/SpringbootSchoolShop/src/main/resources/application.yml
+index d7d1769..c5b0cd1 100644
+--- a/SpringbootSchoolShop/src/main/resources/application.yml
++++ b/SpringbootSchoolShop/src/main/resources/application.yml
+@@ -1,3 +1,8 @@
++# 文件上传配置
++upload:
++  path: /usr/upload  # 图片上传保存的本地路径，可根据环境修改
++  path-pattern: /pictures/**  # 静态资源访问路径模式
++
+ server:
+   port: 8081
+   servlet:

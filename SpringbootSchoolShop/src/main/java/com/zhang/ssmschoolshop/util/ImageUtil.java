@@ -15,17 +15,12 @@ import java.util.UUID;
  **/
 public class ImageUtil {
 
-    public static String imagePath(MultipartFile file, String shopName) {
+    public static String imagePath(MultipartFile file, String shopName, String uploadPath) {
         if (file.isEmpty()) {
             return "false";
         }
         int size = (int) file.getSize();
-        String path = "D:/upload";
-        String os = System.getProperty("os.name");
-        if(!os.toLowerCase().startsWith("windows")){
-            // todo mac需要修改地址
-            path="/usr/upload";
-        }
+        String path = uploadPath;
         String fileName=UUID.randomUUID().toString().substring(0,4)+shopName;
         File dest = new File(path + "/" +fileName);
         System.out.println("保存的绝对路径为:"+dest);

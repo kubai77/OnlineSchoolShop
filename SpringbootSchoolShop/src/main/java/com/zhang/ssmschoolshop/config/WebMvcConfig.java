@@ -1,6 +1,7 @@
 package com.zhang.ssmschoolshop.config;
 
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -12,24 +13,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * @Description TODO
  * @date 2019/5/10
  * @备注  springboot内置tomcat配置虚拟路径
- *      linux： /usr/upload  /pictures
- *      window:  d:/upload  /pictures
+ *      上传路径由 application.yml 中的 upload.path 配置驱动
  **/
 
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-
+    @Autowired
+    private UploadProperties uploadProperties;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String os = System.getProperty("os.name");
-        String pathPatterns="/pictures/**";
-        String pathAbsolute="file:D:/upload/";
-        if (!os.toLowerCase().startsWith("windows")){
-            // todo mac需要修改地址
-            pathAbsolute="file:/usr/upload/";
-        }
+        String pathPatterns = uploadProperties.getPathPattern();
+        String pathAbsolute = "file:" + uploadProperties.getPath() + "/";
         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
 
     }
