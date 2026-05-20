@@ -1,99 +1,70 @@
 package com.zhang.ssmschoolshop.service.impl;
 
-
 import com.zhang.ssmschoolshop.entity.EmailSend;
 import com.zhang.ssmschoolshop.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
-import org.springframework.mail.MailSender;
 import org.springframework.mail.SimpleMailMessage;
-import org.springframework.stereotype.Component;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 
-/**
- * @author codingzx
- * @description 发送邮件的服务
- * @link sendEmailToAdmin  用户下单后 发送邮件给管理员
- * @link sendEmailToUser   管理员发送后通知用户
- * @date 2021/7/24 12:59
- */
 @Service("emailService")
-@Component
 public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
 
-    @Value("${mail.username}")
-    private String sender;
+    @Value("${mail.from:${mail.username}}")
+    private String senderAddress;
 
-    @Value("${mail.receive}")
-    private String receiver;
+    @Value("${mail.receive:}")
+    private String adminRecipientAddress;
 
-    @Value("${mail.receive2}")
-    private String twoDog;
+    @Value("${mail.receive2:}")
+    private String userRecipientAddress;
 
-    @Autowired
-    MailSender mailSender;
+    private final JavaMailSender mailSender;
 
-    public EmailServiceImpl() {
-    }
-
-    public EmailServiceImpl(MailSender mailSender) {
+    public EmailServiceImpl(JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
 
     @Override
     public void sendEmailToAdmin() {
-        EmailSend emailSend = new EmailSend();
-        emailSend.setSubject("用户购买信息");
-        emailSend.setContent("today is " + LocalDate.now() + ",有新用户购买");
-//        emailSend.setReceivers();
-        log.info("开始发送邮件了");
-        SimpleMailMessage message = new SimpleMailMessage();
-        //谁发的
-        message.setFrom(sender);
-        //谁要接收
-        message.setTo(receiver);
-        //邮件标题
-        message.setSubject(emailSend.getSubject());
-        //邮件内容
-        message.setText(emailSend.getContent());
-        try {
-            mailSender.send(message);
-        } catch (MailException e) {
-            e.printStackTrace();
-        }
-
+        sendEmail("用户购买信息", "today is " + LocalDate.now() + ",有新用户购买", adminRecipientAddress, "order-created");
     }
 
     @Override
     public void sendEmailToUser() {
+        sendEmail("管理员已经发货", "today is " + LocalDate.now() + ",商城已经发货", userRecipientAddress, "order-shipped");
+    }
 
-        EmailSend emailSend = new EmailSend();
-        emailSend.setSubject("管理员已经发货");
-        emailSend.setContent("today is " + LocalDate.now() + ",商城已经发货");
-//        emailSend.setReceivers();
-        log.info("开始发送邮件了");
-        SimpleMailMessage message = new SimpleMailMessage();
-        //谁发的
-        message.setFrom(receiver);
-        //谁要接收
-        message.setTo(sender);
-        //邮件标题
-        message.setSubject(emailSend.getSubject());
-        //邮件内容
-        message.setText(emailSend.getContent());
-        try {
-            mailSender.send(message);
-        } catch (MailException e) {
-            e.printStackTrace();
+    private void sendEmail(String subject, String content, String recipientAddress, String scene) {
+        if (!StringUtils.hasText(senderAddress) || !StringUtils.hasText(recipientAddress)) {
+            log.error("邮件发送配置缺失，scene={}, from={}, to={}", scene, senderAddress, recipientAddress);
+            return;
         }
 
+        EmailSend emailSend = new EmailSend();
+        emailSend.setSubject(subject);
+        emailSend.setContent(content);
+        emailSend.setReceivers(new String[]{recipientAddress});
 
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(senderAddress);
+        message.setTo(emailSend.getReceivers());
+        message.setSubject(emailSend.getSubject());
+        message.setText(emailSend.getContent());
+
+        try {
+            mailSender.send(message);
+            log.info("邮件发送成功，scene={}, from={}, to={}, subject={}", scene, senderAddress, recipientAddress, subject);
+        } catch (MailException e) {
+            log.error("邮件发送失败，scene={}, from={}, to={}, subject={}", scene, senderAddress, recipientAddress, subject, e);
+        }
     }
 }
