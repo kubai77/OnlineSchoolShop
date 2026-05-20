@@ -1,0 +1,21 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
+index 1aaf420..82d6c76 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
+@@ -30,7 +30,7 @@ public class ExcelController {
+ 
+ 
+     @GetMapping("/excel/export")
+-    public String ExportRecord(HttpServletResponse response, HttpServletRequest request) {
++    public void ExportRecord(HttpServletResponse response, HttpServletRequest request) {
+         List<Goods> goodsList = goodsService.selectByExample(new GoodsExample());
+ 
+         //定义导出的excel名字
+@@ -38,7 +38,6 @@ public class ExcelController {
+ 
+         //导出用户相关信息
+         new ExcelUtils().export(excelName, goodsList, Goods.class, response);
+-        return "导出资源成功";
+     }
+ 
+     @GetMapping("/excel/import")
