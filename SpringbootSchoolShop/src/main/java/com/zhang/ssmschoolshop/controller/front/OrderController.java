@@ -1,32 +1,38 @@
 package com.zhang.ssmschoolshop.controller.front;
 
-
-import com.zhang.ssmschoolshop.entity.*;
-import com.zhang.ssmschoolshop.service.*;
+import com.zhang.ssmschoolshop.entity.Activity;
+import com.zhang.ssmschoolshop.entity.Address;
+import com.zhang.ssmschoolshop.entity.AddressExample;
+import com.zhang.ssmschoolshop.entity.Goods;
+import com.zhang.ssmschoolshop.entity.ImagePath;
+import com.zhang.ssmschoolshop.entity.Order;
+import com.zhang.ssmschoolshop.entity.OrderItem;
+import com.zhang.ssmschoolshop.entity.ShopCart;
+import com.zhang.ssmschoolshop.entity.ShopCartExample;
+import com.zhang.ssmschoolshop.entity.ShopCartKey;
+import com.zhang.ssmschoolshop.entity.User;
+import com.zhang.ssmschoolshop.service.ActivityService;
+import com.zhang.ssmschoolshop.service.AddressService;
+import com.zhang.ssmschoolshop.service.EmailService;
+import com.zhang.ssmschoolshop.service.GoodsService;
+import com.zhang.ssmschoolshop.service.OrderPriceCalculator;
+import com.zhang.ssmschoolshop.service.OrderService;
+import com.zhang.ssmschoolshop.service.ShopCartService;
 import com.zhang.ssmschoolshop.util.Msg;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.servlet.http.HttpSession;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-
 @Controller
 public class OrderController {
 
-    private static final Logger log = LoggerFactory.getLogger(OrderController.class);
-
-    /*@Value("#{addressService}")*/
     @Autowired
     private AddressService addressService;
 
@@ -43,6 +49,9 @@ public class OrderController {
     private ActivityService activityService;
 
     @Autowired
+    private OrderPriceCalculator orderPriceCalculator;
+
+    @Autowired
     private EmailService emailService;
 
     @RequestMapping("/order")
@@ -53,62 +62,37 @@ public class OrderController {
             return "redirect:/login";
         }
 
-        //查询当前用户的收货地址
         AddressExample addressExample = new AddressExample();
         addressExample.or().andUseridEqualTo(user.getUserid());
         List<Address> addressList = addressService.getAllAddressByExample(addressExample);
 
         model.addAttribute("address", addressList);
 
-        //订单信息
-        //获取当前用户的购物车信息
         ShopCartExample shopCartExample = new ShopCartExample();
         shopCartExample.or().andUseridEqualTo(user.getUserid());
         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
 
-        //获取购物车中的商品信息
         List<Goods> goodsAndImage = new ArrayList<>();
 
-        Float totalPrice = new Float(0);
+        Float totalPrice = 0F;
         Integer oldTotalPrice = 0;
 
         for (ShopCart cart : shopCart) {
-            //分别从购物车列表中获取每个商品
             Goods goods = goodsService.selectById(cart.getGoodsid());
 
             List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
             goods.setImagePaths(imagePathList);
             goods.setNum(cart.getGoodsnum());
 
-            //活动信息
-            Activity activity = activityService.selectByKey(goods.getActivityid());
-            goods.setActivity(activity);
-
-            //处理折扣信息
-            //如果商品折扣不为1
-            if (activity.getDiscount() != 1) {
-                goods.setNewPrice(goods.getPrice() * goods.getNum() * activity.getDiscount());
-                System.out.println("价格为：" + goods.getPrice() * goods.getNum() * activity.getDiscount());
-            } else if (activity.getFullnum() != null) {
-                System.out.println("进入第二层方法");
-                if (goods.getNum() >= activity.getFullnum()) {
-                    goods.setNewPrice((float) (goods.getPrice() * (goods.getNum() - activity.getReducenum())));
-                } else {
-                    goods.setNewPrice((float) (goods.getPrice() * goods.getNum()));
-                }
-            } else if (activity.getFullprice() != null && activity.getReducenum() != null) {
-                if ((goods.getNum() * goods.getNum()) > activity.getFullprice()) {
-                    goods.setNewPrice((float) (goods.getPrice() * goods.getNum() - activity.getReducenum()));
-                } else {
-                    goods.setNewPrice((float) (goods.getPrice() * goods.getNum()));
-
-                }
-
-            } else {
-                goods.setNewPrice((float) (goods.getPrice() * goods.getNum()));
+            Activity activity = null;
+            if (goods.getActivityid() != null) {
+                activity = activityService.selectByKey(goods.getActivityid());
             }
-            totalPrice = totalPrice + goods.getNewPrice();
-            oldTotalPrice = oldTotalPrice + goods.getNum() * goods.getPrice();
+            goods.setActivity(activity);
+            goods.setNewPrice(orderPriceCalculator.calculateNewPrice(goods, activity));
+
+            totalPrice += goods.getNewPrice();
+            oldTotalPrice += goods.getNum() * goods.getPrice();
             goodsAndImage.add(goods);
         }
 
@@ -125,29 +109,21 @@ public class OrderController {
 
         User user = (User) session.getAttribute("user");
 
-        //获取订单信息
         ShopCartExample shopCartExample = new ShopCartExample();
         shopCartExample.or().andUseridEqualTo(user.getUserid());
         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
 
-        //删除购物车
         for (ShopCart cart : shopCart) {
             shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
         }
 
-        //把订单信息写入数据库
         Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
         orderService.insertOrder(order);
-        //插入的订单号
         Integer orderId = order.getOrderid();
 
-        //把订单项写入orderitem表中
         for (ShopCart cart : shopCart) {
             orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
         }
-        // 购买成功通知管理员
-       // emailService.sendEmailToAdmin();
         return Msg.success("购买成功");
     }
-
 }
