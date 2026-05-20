@@ -1,0 +1,76 @@
+diff --git a/SpringbootSchoolShop/pom.xml b/SpringbootSchoolShop/pom.xml
+index e967691..6ad5245 100644
+--- a/SpringbootSchoolShop/pom.xml
++++ b/SpringbootSchoolShop/pom.xml
+@@ -17,7 +17,7 @@
+ 
+     <properties>
+         <java.version>1.8</java.version>
+-        <skipTests>true</skipTests>
++        <skipTests>false</skipTests>
+     </properties>
+ 
+     <dependencies>
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
+index 1aaf420..55c9456 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ExcelController.java
+@@ -30,15 +30,14 @@ public class ExcelController {
+ 
+ 
+     @GetMapping("/excel/export")
+-    public String ExportRecord(HttpServletResponse response, HttpServletRequest request) {
++    public void ExportRecord(HttpServletResponse response, HttpServletRequest request) {
+         List<Goods> goodsList = goodsService.selectByExample(new GoodsExample());
+ 
+         //定义导出的excel名字
+         String excelName = "资源详情表";
+ 
+         //导出用户相关信息
+-        new ExcelUtils().export(excelName, goodsList, Goods.class, response);
+-        return "导出资源成功";
++        ExcelUtils.export(excelName, goodsList, Goods.class, response);
+     }
+ 
+     @GetMapping("/excel/import")
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/entity/Goods.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/entity/Goods.java
+index 4525532..1989418 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/entity/Goods.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/entity/Goods.java
+@@ -1,25 +1,36 @@
+ package com.zhang.ssmschoolshop.entity;
+ 
++import com.zhang.ssmschoolshop.annotinon.ExportEntityMap;
++
+ import java.util.Date;
+ import java.util.List;
+ 
+ public class Goods {
++    @ExportEntityMap(EnName = "goodsid", CnName = "商品ID")
+     private Integer goodsid;
+ 
++    @ExportEntityMap(EnName = "goodsname", CnName = "商品名称")
+     private String goodsname;
+ 
++    @ExportEntityMap(EnName = "price", CnName = "价格")
+     private Integer price;
+ 
++    @ExportEntityMap(EnName = "num", CnName = "数量")
+     private Integer num;
+ 
++    @ExportEntityMap(EnName = "uptime", CnName = "上架时间")
+     private Date uptime;
+ 
++    @ExportEntityMap(EnName = "category", CnName = "分类")
+     private Integer category;
+ 
++    @ExportEntityMap(EnName = "detailcate", CnName = "详细分类")
+     private String detailcate;
+ 
++    @ExportEntityMap(EnName = "activityid", CnName = "活动ID")
+     private Integer activityid;
+ 
++    @ExportEntityMap(EnName = "description", CnName = "描述")
+     private String description;
+ 
+     private List<ImagePath> imagePaths;

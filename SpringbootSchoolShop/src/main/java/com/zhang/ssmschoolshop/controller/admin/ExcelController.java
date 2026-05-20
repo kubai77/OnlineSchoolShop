@@ -30,15 +30,14 @@ public class ExcelController {
 
 
     @GetMapping("/excel/export")
-    public String ExportRecord(HttpServletResponse response, HttpServletRequest request) {
+    public void ExportRecord(HttpServletResponse response, HttpServletRequest request) {
         List<Goods> goodsList = goodsService.selectByExample(new GoodsExample());
 
         //定义导出的excel名字
         String excelName = "资源详情表";
 
         //导出用户相关信息
-        new ExcelUtils().export(excelName, goodsList, Goods.class, response);
-        return "导出资源成功";
+        ExcelUtils.export(excelName, goodsList, Goods.class, response);
     }
 
     @GetMapping("/excel/import")

@@ -1,25 +1,36 @@
 package com.zhang.ssmschoolshop.entity;
 
+import com.zhang.ssmschoolshop.annotinon.ExportEntityMap;
+
 import java.util.Date;
 import java.util.List;
 
 public class Goods {
+    @ExportEntityMap(EnName = "goodsid", CnName = "商品ID")
     private Integer goodsid;
 
+    @ExportEntityMap(EnName = "goodsname", CnName = "商品名称")
     private String goodsname;
 
+    @ExportEntityMap(EnName = "price", CnName = "价格")
     private Integer price;
 
+    @ExportEntityMap(EnName = "num", CnName = "数量")
     private Integer num;
 
+    @ExportEntityMap(EnName = "uptime", CnName = "上架时间")
     private Date uptime;
 
+    @ExportEntityMap(EnName = "category", CnName = "分类")
     private Integer category;
 
+    @ExportEntityMap(EnName = "detailcate", CnName = "详细分类")
     private String detailcate;
 
+    @ExportEntityMap(EnName = "activityid", CnName = "活动ID")
     private Integer activityid;
 
+    @ExportEntityMap(EnName = "description", CnName = "描述")
     private String description;
 
     private List<ImagePath> imagePaths;
