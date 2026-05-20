@@ -141,15 +141,42 @@ public class CustomerController {
 
     @RequestMapping("/saveAddr")
     @ResponseBody
-    public Msg saveAddr(Address address) {
-
+    public Msg saveAddr(Address address, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        // 校验地址是否属于当前用户
+        Address existAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (existAddress == null) {
+            return Msg.fail("地址不存在");
+        }
+        if (!existAddress.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作此地址");
+        }
+        // 确保只能修改属于自己的地址
+        address.setUserid(user.getUserid());
         addressService.updateByPrimaryKeySelective(address);
         return Msg.success("修改成功");
     }
 
     @RequestMapping("/deleteAddr")
     @ResponseBody
-    public Msg deleteAddr(Address address) {
+    public Msg deleteAddr(Address address, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        // 校验地址是否属于当前用户
+        Address existAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (existAddress == null) {
+            return Msg.fail("地址不存在");
+        }
+        if (!existAddress.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作此地址");
+        }
         addressService.deleteByPrimaryKey(address.getAddressid());
         return Msg.success("删除成功");
     }
@@ -219,9 +246,46 @@ public class CustomerController {
 
     @RequestMapping("/deleteList")
     @ResponseBody
-    public Msg deleteList(Order order) {
+    public Msg deleteList(Order order, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        // 校验订单是否属于当前用户
+        Order existOrder = orderService.selectByPrimaryKey(order.getOrderid());
+        if (existOrder == null) {
+            return Msg.fail("订单不存在");
+        }
+        if (!existOrder.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作此订单");
+        }
         orderService.deleteById(order.getOrderid());
         return Msg.success("删除成功");
+    }
+
+    @RequestMapping("/finishList")
+    @ResponseBody
+    public Msg finishList(Integer orderid, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        // 校验订单是否属于当前用户
+        Order existOrder = orderService.selectByPrimaryKey(orderid);
+        if (existOrder == null) {
+            return Msg.fail("订单不存在");
+        }
+        if (!existOrder.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作此订单");
+        }
+        Order order = new Order();
+        order.setOrderid(orderid);
+        order.setIsreceive(true);
+        order.setIscomplete(true);
+        orderService.updateOrderByKey(order);
+        return Msg.success("完成订单成功");
     }
 
     /**
@@ -284,19 +348,12 @@ public class CustomerController {
     public Msg savePsw(String Psw, HttpServletRequest request) {
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
         user.setPassword(Md5Util.MD5Encode(Psw, "UTF-8"));
         userService.updateByPrimaryKeySelective(user);
         return Msg.success("修改密码成功");
-    }
-
-    @RequestMapping("/finishList")
-    @ResponseBody
-    public Msg finishiList(Integer orderid) {
-        Order order = orderService.selectByPrimaryKey(orderid);
-        order.setIsreceive(true);
-        order.setIscomplete(true);
-        orderService.updateOrderByKey(order);
-        return Msg.success("完成订单成功");
     }
 
     @RequestMapping("/logout")

@@ -89,22 +89,33 @@ public class CartController {
 
     @RequestMapping(value = "/deleteCart/{goodsid}", method = RequestMethod.DELETE)
     @ResponseBody
-    public Msg deleteCart(@PathVariable("goodsid")Integer goodsid, HttpSession session) {
+    public Msg deleteCart(@PathVariable("goodsid") Integer goodsid, HttpSession session) {
         User user = (User) session.getAttribute("user");
         if(user == null) {
             return Msg.fail("请先登录");
         }
-
-        shopCartService.deleteByKey(new ShopCartKey(user.getUserid(), goodsid));
+        // 校验购物车项是否属于当前用户
+        ShopCartKey cartKey = new ShopCartKey(user.getUserid(), goodsid);
+        ShopCart existCart = shopCartService.selectCartByKey(cartKey);
+        if (existCart == null) {
+            return Msg.fail("购物车项不存在");
+        }
+        shopCartService.deleteByKey(cartKey);
         return Msg.success("删除成功");
     }
 
     @RequestMapping("/update")
     @ResponseBody
-    public Msg updateCart(Integer goodsid,Integer num,HttpSession session) {
+    public Msg updateCart(Integer goodsid, Integer num, HttpSession session) {
         User user = (User) session.getAttribute("user");
         if(user == null) {
             return Msg.fail("请先登录");
+        }
+        // 校验购物车项是否属于当前用户
+        ShopCartKey cartKey = new ShopCartKey(user.getUserid(), goodsid);
+        ShopCart existCart = shopCartService.selectCartByKey(cartKey);
+        if (existCart == null) {
+            return Msg.fail("购物车项不存在");
         }
         ShopCart shopCart = new ShopCart();
         shopCart.setUserid(user.getUserid());

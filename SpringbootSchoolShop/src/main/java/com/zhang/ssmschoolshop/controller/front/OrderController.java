@@ -124,7 +124,17 @@ public class OrderController {
     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
 
         User user = (User) session.getAttribute("user");
-
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        // 校验地址是否属于当前用户
+        Address existAddress = addressService.selectByPrimaryKey(addressid);
+        if (existAddress == null) {
+            return Msg.fail("地址不存在");
+        }
+        if (!existAddress.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权使用此地址");
+        }
         //获取订单信息
         ShopCartExample shopCartExample = new ShopCartExample();
         shopCartExample.or().andUseridEqualTo(user.getUserid());
