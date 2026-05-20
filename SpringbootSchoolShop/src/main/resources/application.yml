@@ -7,6 +7,17 @@ server:
       max-request-size: 100MB #总文件大小
 
 spring:
+     mail:
+       host: smtp.qq.com
+       username: 1452212104@qq.com
+       password: ngwtfshywjpajihi1  ### 你的邮件smtp授权码
+       default-encoding: UTF-8
+       protocol: smtp
+       properties:
+         mail:
+           smtp:
+             ssl:
+               enable: true
      datasource:
         driver-class-name: com.mysql.cj.jdbc.Driver
         url: jdbc:mysql://127.0.0.1:3306/db_shopmaster?serverTimezone=GMT%2B8&useUnicode=true&characterEncoding=utf8
@@ -40,21 +51,12 @@ logging:
 
 
 mail:
-  host: smtp.qq.com
-  username: 1452212104@qq.com
-  password: ngwtfshywjpajihi1  ### 你的邮件smtp授权码
-  default-encoding: UTF-8
-  protocol: smtp
-  properties:
-    mail:
-      smtp:
-        ssl:
-          enable: true
   #spring.mail.port: 25
-  from: 1452212105@qq.com
+  from: 1452212104@qq.com
   receive:  1452212101@qq.com #收件者邮箱
   receive2: 1452212102@qq.com
   test-connection: false
+  enabled: true # 邮件发送开关
 
 
 

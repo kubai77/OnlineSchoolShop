@@ -7,6 +7,7 @@ import com.zhang.ssmschoolshop.entity.*;
 import com.zhang.ssmschoolshop.service.EmailService;
 import com.zhang.ssmschoolshop.service.GoodsService;
 import com.zhang.ssmschoolshop.service.OrderService;
+import com.zhang.ssmschoolshop.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -27,6 +28,8 @@ public class AdminOrderController {
     @Autowired
     private GoodsService goodsService;
 
+    @Autowired
+    private UserService userService;
 
     @Autowired
     private EmailService emailService;
@@ -95,8 +98,15 @@ public class AdminOrderController {
         order.setOrderid(orderid);
         order.setIssend(true);
         orderService.updateOrderByKey(order);
+        
         // 发送信息给用户 管理员已经发货了
-        // emailService.sendEmailToUser();
+        Order fullOrder = orderService.selectByPrimaryKey(orderid);
+        if (fullOrder != null && fullOrder.getUserid() != null) {
+            User user = userService.selectByPrimaryKey(fullOrder.getUserid());
+            if (user != null && user.getEmail() != null) {
+                emailService.sendEmailToUser(user.getEmail());
+            }
+        }
         return "redirect:/admin/order/send";
     }
 
