@@ -4,6 +4,7 @@ package com.zhang.ssmschoolshop.controller.front;
 import com.zhang.ssmschoolshop.entity.*;
 import com.zhang.ssmschoolshop.service.*;
 import com.zhang.ssmschoolshop.util.Msg;
+import com.zhang.ssmschoolshop.util.PriceCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -73,17 +74,8 @@ public class OrderController {
             Activity activity = activityService.selectByKey(goods.getActivityid());
             goods.setActivity(activity);
 
-            if(activity.getDiscount() != 1) {
-                goods.setNewPrice(goods.getPrice()*goods.getNum()* activity.getDiscount());
-            } else if(activity.getFullnum() != null) {
-                if (goods.getNum() >= activity.getFullnum()) {
-                    goods.setNewPrice((float) (goods.getPrice()*(goods.getNum()-activity.getReducenum())));
-                } else {
-                    goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-                }
-            } else {
-                goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-            }
+            // 使用PriceCalculator计算优惠价格
+            goods.setNewPrice(PriceCalculator.calculate(goods, activity));
             totalPrice = totalPrice + goods.getNewPrice();
             oldTotalPrice = oldTotalPrice + goods.getNum() * goods.getPrice();
             goodsAndImage.add(goods);
