@@ -50,8 +50,8 @@ public class CustomerController {
             registerResult.addAttribute("errorMsg", "用户名被占用");
             return "register";
         } else {
-            Date RegTime = new Date();
-            user.setRegtime(RegTime);
+            Date regTime = new Date();
+            user.setRegtime(regTime);
             userService.insertSelective(user);
             return "redirect:/login";
         }
@@ -61,7 +61,6 @@ public class CustomerController {
     @RequestMapping("/loginconfirm")
     public String loginConfirm(User user, Model loginResult, HttpServletRequest request, @RequestParam("confirmlogo") String confirmlogo) {
         System.out.println("传进来的用户帐号和密码为:" + user);
-        //进行用户密码MD5加密验证
         user.setPassword(Md5Util.MD5Encode(user.getPassword(), "UTF-8"));
         HttpSession session = request.getSession();
         String verificationCode = (String) session.getAttribute("certCode");
@@ -103,7 +102,8 @@ public class CustomerController {
     public Msg saveInfo(String name, String email, String telephone, HttpServletRequest request) {
         HttpSession session = request.getSession();
         UserExample userExample = new UserExample();
-        User user, updateUser = new User();
+        User user;
+        User updateUser = new User();
         List<User> userList = new ArrayList<>();
         Integer userid;
         user = (User) session.getAttribute("user");
@@ -141,15 +141,39 @@ public class CustomerController {
 
     @RequestMapping("/saveAddr")
     @ResponseBody
-    public Msg saveAddr(Address address) {
+    public Msg saveAddr(Address address, HttpServletRequest request) {
+        User user = currentUser(request);
+        if (address.getAddressid() == null) {
+            return Msg.fail("地址不存在");
+        }
+        Address currentAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (currentAddress == null) {
+            return Msg.fail("地址不存在");
+        }
+        if (!user.getUserid().equals(currentAddress.getUserid())) {
+            return Msg.fail("无权修改该地址");
+        }
 
+        address.setUserid(user.getUserid());
         addressService.updateByPrimaryKeySelective(address);
         return Msg.success("修改成功");
     }
 
     @RequestMapping("/deleteAddr")
     @ResponseBody
-    public Msg deleteAddr(Address address) {
+    public Msg deleteAddr(Address address, HttpServletRequest request) {
+        User user = currentUser(request);
+        if (address.getAddressid() == null) {
+            return Msg.fail("地址不存在");
+        }
+        Address currentAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (currentAddress == null) {
+            return Msg.fail("地址不存在");
+        }
+        if (!user.getUserid().equals(currentAddress.getUserid())) {
+            return Msg.fail("无权删除该地址");
+        }
+
         addressService.deleteByPrimaryKey(address.getAddressid());
         return Msg.success("删除成功");
     }
@@ -157,9 +181,7 @@ public class CustomerController {
     @RequestMapping("/insertAddr")
     @ResponseBody
     public Msg insertAddr(Address address, HttpServletRequest request) {
-        HttpSession session = request.getSession();
-        User user = new User();
-        user = (User) session.getAttribute("user");
+        User user = currentUser(request);
         address.setUserid(user.getUserid());
         addressService.insertSelective(address);
         return Msg.success("添加成功");
@@ -219,18 +241,23 @@ public class CustomerController {
 
     @RequestMapping("/deleteList")
     @ResponseBody
-    public Msg deleteList(Order order) {
+    public Msg deleteList(Order order, HttpServletRequest request) {
+        User user = currentUser(request);
+        if (order.getOrderid() == null) {
+            return Msg.fail("订单不存在");
+        }
+        Order currentOrder = orderService.selectByPrimaryKey(order.getOrderid());
+        if (currentOrder == null) {
+            return Msg.fail("订单不存在");
+        }
+        if (!user.getUserid().equals(currentOrder.getUserid())) {
+            return Msg.fail("无权删除该订单");
+        }
+
         orderService.deleteById(order.getOrderid());
         return Msg.success("删除成功");
     }
 
-    /**
-     * 收藏商品
-     * @param pn
-     * @param request
-     * @param model
-     * @return
-     */
     @RequestMapping("/info/favorite")
     public String showFavorite(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletRequest request, Model model) {
         HttpSession session = request.getSession();
@@ -239,7 +266,6 @@ public class CustomerController {
             return "redirect:/login";
         }
 
-        //一页显示几个数据
         PageHelper.startPage(pn, 16);
 
         FavoriteExample favoriteExample = new FavoriteExample();
@@ -258,21 +284,16 @@ public class CustomerController {
             goodsList = goodsService.selectByExample(goodsExample);
         }
 
-        //获取图片地址
         for (int i = 0; i < goodsList.size(); i++) {
             Goods goods = goodsList.get(i);
 
             List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
 
             goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
             goods.setFav(true);
-
             goodsList.set(i, goods);
         }
 
-        //显示几个页号
         PageInfo page = new PageInfo(goodsList, 5);
         model.addAttribute("pageInfo", page);
 
@@ -291,8 +312,16 @@ public class CustomerController {
 
     @RequestMapping("/finishList")
     @ResponseBody
-    public Msg finishiList(Integer orderid) {
+    public Msg finishiList(Integer orderid, HttpServletRequest request) {
+        User user = currentUser(request);
         Order order = orderService.selectByPrimaryKey(orderid);
+        if (order == null) {
+            return Msg.fail("订单不存在");
+        }
+        if (!user.getUserid().equals(order.getUserid())) {
+            return Msg.fail("无权完成该订单");
+        }
+
         order.setIsreceive(true);
         order.setIscomplete(true);
         orderService.updateOrderByKey(order);
@@ -306,4 +335,7 @@ public class CustomerController {
         return "redirect:/login";
     }
 
+    private User currentUser(HttpServletRequest request) {
+        return (User) request.getSession().getAttribute("user");
+    }
 }

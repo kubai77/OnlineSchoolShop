@@ -1,0 +1,350 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..a5f0775 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -2,36 +2,63 @@ package com.zhang.ssmschoolshop.config;
+ 
+ 
+ import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ 
+-
+-/**
+- * @author created by CodingZhangxin
+- * @version v.0.1
+- * @Description TODO
+- * @date 2019/5/10
+- * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
+- **/
++import java.util.Arrays;
++import java.util.List;
+ 
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
++    private static final List<String> ADMIN_EXCLUDE_PATHS = Arrays.asList(
++            "/admin/login",
++            "/admin/confirmLogin",
++            "/admin/logout"
++    );
+ 
++    private static final List<String> USER_PROTECTED_PATHS = Arrays.asList(
++            "/information",
++            "/saveInfo",
++            "/info/**",
++            "/saveAddr",
++            "/deleteAddr",
++            "/insertAddr",
++            "/deleteList",
++            "/savePsw",
++            "/finishList",
++            "/logout",
++            "/order",
++            "/orderFinish",
++            "/addCart",
++            "/showcart",
++            "/cartjson",
++            "/deleteCart/**",
++            "/update",
++            "/collect",
++            "/deleteCollect",
++            "/comment"
++    );
++
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++        registry.addInterceptor(new SessionAuthInterceptor("admin", "/admin/login", "请先登录管理员账号"))
++                .addPathPatterns("/admin/**")
++                .excludePathPatterns(ADMIN_EXCLUDE_PATHS);
++
++        registry.addInterceptor(new SessionAuthInterceptor("user", "/login", "请先登录"))
++                .addPathPatterns(USER_PROTECTED_PATHS);
++    }
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+         String os = System.getProperty("os.name");
+-        String pathPatterns="/pictures/**";
+-        String pathAbsolute="file:D:/upload/";
+-        if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            pathAbsolute="file:/usr/upload/";
++        String pathPatterns = "/pictures/**";
++        String pathAbsolute = "file:D:/upload/";
++        if (!os.toLowerCase().startsWith("windows")) {
++            pathAbsolute = "file:/usr/upload/";
+         }
+         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+-
+     }
+-
+-}
+\ No newline at end of file
++}
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index 6aa9b3e..24be621 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -50,8 +50,8 @@ public class CustomerController {
+             registerResult.addAttribute("errorMsg", "用户名被占用");
+             return "register";
+         } else {
+-            Date RegTime = new Date();
+-            user.setRegtime(RegTime);
++            Date regTime = new Date();
++            user.setRegtime(regTime);
+             userService.insertSelective(user);
+             return "redirect:/login";
+         }
+@@ -61,7 +61,6 @@ public class CustomerController {
+     @RequestMapping("/loginconfirm")
+     public String loginConfirm(User user, Model loginResult, HttpServletRequest request, @RequestParam("confirmlogo") String confirmlogo) {
+         System.out.println("传进来的用户帐号和密码为:" + user);
+-        //进行用户密码MD5加密验证
+         user.setPassword(Md5Util.MD5Encode(user.getPassword(), "UTF-8"));
+         HttpSession session = request.getSession();
+         String verificationCode = (String) session.getAttribute("certCode");
+@@ -103,7 +102,8 @@ public class CustomerController {
+     public Msg saveInfo(String name, String email, String telephone, HttpServletRequest request) {
+         HttpSession session = request.getSession();
+         UserExample userExample = new UserExample();
+-        User user, updateUser = new User();
++        User user;
++        User updateUser = new User();
+         List<User> userList = new ArrayList<>();
+         Integer userid;
+         user = (User) session.getAttribute("user");
+@@ -141,15 +141,39 @@ public class CustomerController {
+ 
+     @RequestMapping("/saveAddr")
+     @ResponseBody
+-    public Msg saveAddr(Address address) {
++    public Msg saveAddr(Address address, HttpServletRequest request) {
++        User user = currentUser(request);
++        if (address.getAddressid() == null) {
++            return Msg.fail("地址不存在");
++        }
++        Address currentAddress = addressService.selectByPrimaryKey(address.getAddressid());
++        if (currentAddress == null) {
++            return Msg.fail("地址不存在");
++        }
++        if (!user.getUserid().equals(currentAddress.getUserid())) {
++            return Msg.fail("无权修改该地址");
++        }
+ 
++        address.setUserid(user.getUserid());
+         addressService.updateByPrimaryKeySelective(address);
+         return Msg.success("修改成功");
+     }
+ 
+     @RequestMapping("/deleteAddr")
+     @ResponseBody
+-    public Msg deleteAddr(Address address) {
++    public Msg deleteAddr(Address address, HttpServletRequest request) {
++        User user = currentUser(request);
++        if (address.getAddressid() == null) {
++            return Msg.fail("地址不存在");
++        }
++        Address currentAddress = addressService.selectByPrimaryKey(address.getAddressid());
++        if (currentAddress == null) {
++            return Msg.fail("地址不存在");
++        }
++        if (!user.getUserid().equals(currentAddress.getUserid())) {
++            return Msg.fail("无权删除该地址");
++        }
++
+         addressService.deleteByPrimaryKey(address.getAddressid());
+         return Msg.success("删除成功");
+     }
+@@ -157,9 +181,7 @@ public class CustomerController {
+     @RequestMapping("/insertAddr")
+     @ResponseBody
+     public Msg insertAddr(Address address, HttpServletRequest request) {
+-        HttpSession session = request.getSession();
+-        User user = new User();
+-        user = (User) session.getAttribute("user");
++        User user = currentUser(request);
+         address.setUserid(user.getUserid());
+         addressService.insertSelective(address);
+         return Msg.success("添加成功");
+@@ -219,18 +241,23 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteList")
+     @ResponseBody
+-    public Msg deleteList(Order order) {
++    public Msg deleteList(Order order, HttpServletRequest request) {
++        User user = currentUser(request);
++        if (order.getOrderid() == null) {
++            return Msg.fail("订单不存在");
++        }
++        Order currentOrder = orderService.selectByPrimaryKey(order.getOrderid());
++        if (currentOrder == null) {
++            return Msg.fail("订单不存在");
++        }
++        if (!user.getUserid().equals(currentOrder.getUserid())) {
++            return Msg.fail("无权删除该订单");
++        }
++
+         orderService.deleteById(order.getOrderid());
+         return Msg.success("删除成功");
+     }
+ 
+-    /**
+-     * 收藏商品
+-     * @param pn
+-     * @param request
+-     * @param model
+-     * @return
+-     */
+     @RequestMapping("/info/favorite")
+     public String showFavorite(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletRequest request, Model model) {
+         HttpSession session = request.getSession();
+@@ -239,7 +266,6 @@ public class CustomerController {
+             return "redirect:/login";
+         }
+ 
+-        //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+ 
+         FavoriteExample favoriteExample = new FavoriteExample();
+@@ -258,21 +284,16 @@ public class CustomerController {
+             goodsList = goodsService.selectByExample(goodsExample);
+         }
+ 
+-        //获取图片地址
+         for (int i = 0; i < goodsList.size(); i++) {
+             Goods goods = goodsList.get(i);
+ 
+             List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+ 
+             goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+             goods.setFav(true);
+-
+             goodsList.set(i, goods);
+         }
+ 
+-        //显示几个页号
+         PageInfo page = new PageInfo(goodsList, 5);
+         model.addAttribute("pageInfo", page);
+ 
+@@ -291,8 +312,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/finishList")
+     @ResponseBody
+-    public Msg finishiList(Integer orderid) {
++    public Msg finishiList(Integer orderid, HttpServletRequest request) {
++        User user = currentUser(request);
+         Order order = orderService.selectByPrimaryKey(orderid);
++        if (order == null) {
++            return Msg.fail("订单不存在");
++        }
++        if (!user.getUserid().equals(order.getUserid())) {
++            return Msg.fail("无权完成该订单");
++        }
++
+         order.setIsreceive(true);
+         order.setIscomplete(true);
+         orderService.updateOrderByKey(order);
+@@ -306,4 +335,7 @@ public class CustomerController {
+         return "redirect:/login";
+     }
+ 
++    private User currentUser(HttpServletRequest request) {
++        return (User) request.getSession().getAttribute("user");
++    }
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..bf322bd 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -26,7 +26,6 @@ public class OrderController {
+ 
+     private static final Logger log = LoggerFactory.getLogger(OrderController.class);
+ 
+-    /*@Value("#{addressService}")*/
+     @Autowired
+     private AddressService addressService;
+ 
+@@ -53,39 +52,31 @@ public class OrderController {
+             return "redirect:/login";
+         }
+ 
+-        //查询当前用户的收货地址
+         AddressExample addressExample = new AddressExample();
+         addressExample.or().andUseridEqualTo(user.getUserid());
+         List<Address> addressList = addressService.getAllAddressByExample(addressExample);
+ 
+         model.addAttribute("address", addressList);
+ 
+-        //订单信息
+-        //获取当前用户的购物车信息
+         ShopCartExample shopCartExample = new ShopCartExample();
+         shopCartExample.or().andUseridEqualTo(user.getUserid());
+         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+ 
+-        //获取购物车中的商品信息
+         List<Goods> goodsAndImage = new ArrayList<>();
+ 
+         Float totalPrice = new Float(0);
+         Integer oldTotalPrice = 0;
+ 
+         for (ShopCart cart : shopCart) {
+-            //分别从购物车列表中获取每个商品
+             Goods goods = goodsService.selectById(cart.getGoodsid());
+ 
+             List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+             goods.setImagePaths(imagePathList);
+             goods.setNum(cart.getGoodsnum());
+ 
+-            //活动信息
+             Activity activity = activityService.selectByKey(goods.getActivityid());
+             goods.setActivity(activity);
+ 
+-            //处理折扣信息
+-            //如果商品折扣不为1
+             if (activity.getDiscount() != 1) {
+                 goods.setNewPrice(goods.getPrice() * goods.getNum() * activity.getDiscount());
+                 System.out.println("价格为：" + goods.getPrice() * goods.getNum() * activity.getDiscount());
+@@ -124,29 +115,29 @@ public class OrderController {
+     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
+ 
+         User user = (User) session.getAttribute("user");
++        Address address = addressService.selectByPrimaryKey(addressid);
++        if (address == null) {
++            return Msg.fail("收货地址不存在");
++        }
++        if (!user.getUserid().equals(address.getUserid())) {
++            return Msg.fail("无权使用该收货地址");
++        }
+ 
+-        //获取订单信息
+         ShopCartExample shopCartExample = new ShopCartExample();
+         shopCartExample.or().andUseridEqualTo(user.getUserid());
+         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+ 
+-        //删除购物车
+         for (ShopCart cart : shopCart) {
+             shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
+         }
+ 
+-        //把订单信息写入数据库
+         Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
+         orderService.insertOrder(order);
+-        //插入的订单号
+         Integer orderId = order.getOrderid();
+ 
+-        //把订单项写入orderitem表中
+         for (ShopCart cart : shopCart) {
+             orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
+         }
+-        // 购买成功通知管理员
+-       // emailService.sendEmailToAdmin();
+         return Msg.success("购买成功");
+     }
+ 
