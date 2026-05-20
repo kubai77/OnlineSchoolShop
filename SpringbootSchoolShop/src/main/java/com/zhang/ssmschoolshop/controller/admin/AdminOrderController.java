@@ -34,11 +34,6 @@ public class AdminOrderController {
     @RequestMapping("/send")
     public String sendOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
 
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
-
         //一页显示几个数据
         PageHelper.startPage(pn, 2);
 
@@ -87,10 +82,6 @@ public class AdminOrderController {
 
     @RequestMapping("/sendGoods")
     public String sendGoods(Integer orderid, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
         Order order = new Order();
         order.setOrderid(orderid);
         order.setIssend(true);
@@ -102,10 +93,6 @@ public class AdminOrderController {
 
     @RequestMapping("/receiver")
     public String receiveOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
         //一页显示几个数据
         PageHelper.startPage(pn, 2);
 
@@ -156,10 +143,6 @@ public class AdminOrderController {
 
     @RequestMapping("/complete")
     public String completeOrder(@RequestParam(value = "page", defaultValue = "1") Integer pn, Model model, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
         //一页显示几个数据
         PageHelper.startPage(pn, 2);
 

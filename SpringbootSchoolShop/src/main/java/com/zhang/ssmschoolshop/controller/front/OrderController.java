@@ -49,9 +49,6 @@ public class OrderController {
     public String showOrder(HttpSession session, Model model) {
 
         User user = (User) session.getAttribute("user");
-        if (user == null) {
-            return "redirect:/login";
-        }
 
         //查询当前用户的收货地址
         AddressExample addressExample = new AddressExample();

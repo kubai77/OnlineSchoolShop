@@ -86,13 +86,8 @@ public class CustomerController {
     @RequestMapping("/information")
     public String information(Model userModel, HttpServletRequest request) {
         HttpSession session = request.getSession();
-        User user;
-        Integer userId;
-        user = (User) session.getAttribute("user");
-        if (user == null) {
-            return "redirect:/login";
-        }
-        userId = user.getUserid();
+        User user = (User) session.getAttribute("user");
+        Integer userId = user.getUserid();
         user = userService.selectByPrimaryKey(userId);
         userModel.addAttribute("user", user);
         return "information";
@@ -129,9 +124,6 @@ public class CustomerController {
     public String address(HttpServletRequest request, Model addressModel) {
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
-        if (user == null) {
-            return "redirect:/login";
-        }
         AddressExample addressExample = new AddressExample();
         addressExample.or().andUseridEqualTo(user.getUserid());
         List<Address> addressList = addressService.getAllAddressByExample(addressExample);
@@ -141,15 +133,27 @@ public class CustomerController {
 
     @RequestMapping("/saveAddr")
     @ResponseBody
-    public Msg saveAddr(Address address) {
-
+    public Msg saveAddr(Address address, HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        // 校验地址归属：只能修改自己的地址
+        Address existing = addressService.selectByPrimaryKey(address.getAddressid());
+        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作该地址");
+        }
+        address.setUserid(user.getUserid());
         addressService.updateByPrimaryKeySelective(address);
         return Msg.success("修改成功");
     }
 
     @RequestMapping("/deleteAddr")
     @ResponseBody
-    public Msg deleteAddr(Address address) {
+    public Msg deleteAddr(Address address, HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        // 校验地址归属：只能删除自己的地址
+        Address existing = addressService.selectByPrimaryKey(address.getAddressid());
+        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作该地址");
+        }
         addressService.deleteByPrimaryKey(address.getAddressid());
         return Msg.success("删除成功");
     }
@@ -175,12 +179,7 @@ public class CustomerController {
     public String list(HttpServletRequest request, Model orderModel) {
 
         HttpSession session = request.getSession();
-        User user;
-        user = (User) session.getAttribute("user");
-
-        if (user == null) {
-            return "redirect:/login";
-        }
+        User user = (User) session.getAttribute("user");
 
         OrderExample orderExample = new OrderExample();
         orderExample.or().andUseridEqualTo(user.getUserid());
@@ -219,7 +218,13 @@ public class CustomerController {
 
     @RequestMapping("/deleteList")
     @ResponseBody
-    public Msg deleteList(Order order) {
+    public Msg deleteList(Order order, HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        // 校验订单归属：只能删除自己的订单
+        Order existing = orderService.selectByPrimaryKey(order.getOrderid());
+        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作该订单");
+        }
         orderService.deleteById(order.getOrderid());
         return Msg.success("删除成功");
     }
@@ -235,9 +240,6 @@ public class CustomerController {
     public String showFavorite(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletRequest request, Model model) {
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
-        if (user == null) {
-            return "redirect:/login";
-        }
 
         //一页显示几个数据
         PageHelper.startPage(pn, 16);
@@ -291,11 +293,16 @@ public class CustomerController {
 
     @RequestMapping("/finishList")
     @ResponseBody
-    public Msg finishiList(Integer orderid) {
-        Order order = orderService.selectByPrimaryKey(orderid);
-        order.setIsreceive(true);
-        order.setIscomplete(true);
-        orderService.updateOrderByKey(order);
+    public Msg finishiList(Integer orderid, HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        // 校验订单归属：只能完成自己的订单
+        Order existing = orderService.selectByPrimaryKey(orderid);
+        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作该订单");
+        }
+        existing.setIsreceive(true);
+        existing.setIscomplete(true);
+        orderService.updateOrderByKey(existing);
         return Msg.success("完成订单成功");
     }
 

@@ -148,11 +148,7 @@ public class FrontGoodsController {
     @RequestMapping("/collect")
     @ResponseBody
     public Msg collectGoods(Integer goodsid, HttpSession session) {
-        //取登录用户信息,未登录重定向至登录页面
         User user = (User) session.getAttribute("user");
-        if(user == null) {
-            return Msg.fail("收藏失败");
-        }
 
         //添加收藏
         Favorite favorite = new Favorite();
@@ -169,9 +165,6 @@ public class FrontGoodsController {
     @ResponseBody
     public Msg deleteFavGoods(Integer goodsid, HttpSession session) {
         User user = (User) session.getAttribute("user");
-        if (user == null) {
-            return Msg.fail("取消收藏失败");
-        }
 
         //删除收藏
         goodsService.deleteFavByKey(new FavoriteKey(user.getUserid(),goodsid));
@@ -243,9 +236,6 @@ public class FrontGoodsController {
     public Msg comment(Comment comment, HttpServletRequest request){
         HttpSession session=request.getSession();
         User user=(User) session.getAttribute("user");
-        if (user == null) {
-            return Msg.fail("评论失败");
-        }
         comment.setUserid(user.getUserid());
         Date date=new Date();
         comment.setCommenttime(date);

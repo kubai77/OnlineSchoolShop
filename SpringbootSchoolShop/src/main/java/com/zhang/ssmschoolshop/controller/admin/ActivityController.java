@@ -35,11 +35,6 @@ public class ActivityController {
     @RequestMapping("/show")
     public String showActivity(@RequestParam(value = "page",defaultValue = "1") Integer pn, Model model, HttpSession session) {
 
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
-
         //一页显示几个数据
         PageHelper.startPage(pn, 10);
 
@@ -59,11 +54,6 @@ public class ActivityController {
     @ResponseBody
     public Msg showActivityJson(@RequestParam(value = "page",defaultValue = "1") Integer pn, Model model , HttpSession session) {
 
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return Msg.fail("请先登录");
-        }
-
         ActivityExample activityExample = new ActivityExample();
         activityExample.or();
 
@@ -74,10 +64,6 @@ public class ActivityController {
 
     @RequestMapping("/add")
     public String showAddActivity(HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
         return "addActivity";
     }
 
@@ -92,10 +78,6 @@ public class ActivityController {
     @RequestMapping("/update")
     @ResponseBody
     public Msg updateActivity(Integer goodsid, Integer activityid, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return Msg.fail("请先登录");
-        }
         Goods goods = new Goods();
         goods.setActivityid(activityid);
         goods.setGoodsid(goodsid);
@@ -105,11 +87,6 @@ public class ActivityController {
 
     @RequestMapping("delete")
     public String deleteActivity(Integer activityid, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
-
         activityService.deleteByActivityId(activityid);
         return "redirect:/admin/activity/show";
     }

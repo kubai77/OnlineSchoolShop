@@ -1,0 +1,474 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..a849b1d 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,25 +1,50 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import com.zhang.ssmschoolshop.interceptor.AdminInterceptor;
++import com.zhang.ssmschoolshop.interceptor.UserInterceptor;
+ import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ 
+ 
+-/**
+- * @author created by CodingZhangxin
+- * @version v.0.1
+- * @Description TODO
+- * @date 2019/5/10
+- * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
+- **/
+-
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
+-
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++        // 后台管理员拦截：/admin/** 下除登录/登出外全部需要 admin session
++        registry.addInterceptor(new AdminInterceptor())
++                .addPathPatterns("/admin/**")
++                .excludePathPatterns(
++                        "/admin/login",
++                        "/admin/confirmLogin",
++                        "/admin/logout"
++                );
++
++        // 前台用户拦截：用户中心、购物车、订单、收藏、评论等需要登录的接口
++        registry.addInterceptor(new UserInterceptor())
++                .addPathPatterns(
++                        "/information",
++                        "/saveInfo",
++                        "/savePsw",
++                        "/info/**",
++                        "/saveAddr",
++                        "/deleteAddr",
++                        "/insertAddr",
++                        "/order",
++                        "/orderFinish",
++                        "/addCart",
++                        "/showcart",
++                        "/cartjson",
++                        "/deleteCart/**",
++                        "/update",
++                        "/collect",
++                        "/deleteCollect",
++                        "/comment"
++                );
++    }
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+@@ -27,7 +52,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
+         String pathPatterns="/pictures/**";
+         String pathAbsolute="file:D:/upload/";
+         if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+             pathAbsolute="file:/usr/upload/";
+         }
+         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ActivityController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ActivityController.java
+index e78d253..dc4b1a7 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ActivityController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/ActivityController.java
+@@ -35,11 +35,6 @@ public class ActivityController {
+     @RequestMapping("/show")
+     public String showActivity(@RequestParam(value = "page",defaultValue = "1") Integer pn, Model model, HttpSession session) {
+ 
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+-
+         //一页显示几个数据
+         PageHelper.startPage(pn, 10);
+ 
+@@ -59,11 +54,6 @@ public class ActivityController {
+     @ResponseBody
+     public Msg showActivityJson(@RequestParam(value = "page",defaultValue = "1") Integer pn, Model model , HttpSession session) {
+ 
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return Msg.fail("请先登录");
+-        }
+-
+         ActivityExample activityExample = new ActivityExample();
+         activityExample.or();
+ 
+@@ -74,10 +64,6 @@ public class ActivityController {
+ 
+     @RequestMapping("/add")
+     public String showAddActivity(HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+         return "addActivity";
+     }
+ 
+@@ -92,10 +78,6 @@ public class ActivityController {
+     @RequestMapping("/update")
+     @ResponseBody
+     public Msg updateActivity(Integer goodsid, Integer activityid, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return Msg.fail("请先登录");
+-        }
+         Goods goods = new Goods();
+         goods.setActivityid(activityid);
+         goods.setGoodsid(goodsid);
+@@ -105,11 +87,6 @@ public class ActivityController {
+ 
+     @RequestMapping("delete")
+     public String deleteActivity(Integer activityid, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+-
+         activityService.deleteByActivityId(activityid);
+         return "redirect:/admin/activity/show";
+     }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
+index 11f44d3..f615236 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
+@@ -34,11 +34,6 @@ public class AdminOrderController {
+     @RequestMapping("/send")
+     public String sendOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
+ 
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+-
+         //一页显示几个数据
+         PageHelper.startPage(pn, 2);
+ 
+@@ -87,10 +82,6 @@ public class AdminOrderController {
+ 
+     @RequestMapping("/sendGoods")
+     public String sendGoods(Integer orderid, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+         Order order = new Order();
+         order.setOrderid(orderid);
+         order.setIssend(true);
+@@ -102,10 +93,6 @@ public class AdminOrderController {
+ 
+     @RequestMapping("/receiver")
+     public String receiveOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+         //一页显示几个数据
+         PageHelper.startPage(pn, 2);
+ 
+@@ -156,10 +143,6 @@ public class AdminOrderController {
+ 
+     @RequestMapping("/complete")
+     public String completeOrder(@RequestParam(value = "page", defaultValue = "1") Integer pn, Model model, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+         //一页显示几个数据
+         PageHelper.startPage(pn, 2);
+ 
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+index 03dd96a..1dc15b5 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+@@ -37,10 +37,6 @@ public class GoodsController {
+     @RequestMapping("/showjson")
+     @ResponseBody
+     public Msg getAllGoods(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return Msg.fail("请先登录");
+-        }
+         //一页显示几个数据
+         PageHelper.startPage(pn, 10);
+ 
+@@ -56,11 +52,6 @@ public class GoodsController {
+ 
+     @RequestMapping("/show")
+     public String goodsManage(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) throws IOException {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+-
+         List<Category> categoryList = cateService.selectByExample(new CategoryExample());
+         model.addAttribute("categoryList", categoryList);
+ 
+@@ -69,11 +60,6 @@ public class GoodsController {
+ 
+     @RequestMapping("/add")
+     public String showAdd(@ModelAttribute("succeseMsg") String msg, Model model, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+-
+         if (!msg.equals("")) {
+             model.addAttribute("msg", msg);
+         }
+@@ -89,11 +75,6 @@ public class GoodsController {
+     @RequestMapping(value = "/update", method = RequestMethod.POST)
+     @ResponseBody
+     public Msg updateGoods(Goods goods, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return Msg.fail("请先登录");
+-        }
+-        /* goods.setGoodsid(goodsid);*/
+         goodsService.updateGoodsById(goods);
+         return Msg.success("更新成功!");
+     }
+@@ -133,10 +114,6 @@ public class GoodsController {
+ 
+     @RequestMapping("/addCategory")
+     public String addcategory(@ModelAttribute("succeseMsg") String msg, Model model, HttpSession session) {
+-        Admin admin = (Admin) session.getAttribute("admin");
+-        if (admin == null) {
+-            return "redirect:/admin/login";
+-        }
+         CategoryExample categoryExample = new CategoryExample();
+         categoryExample.or();
+         List<Category> categoryList;
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CartController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CartController.java
+index 4d947f6..5d90b90 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CartController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CartController.java
+@@ -31,9 +31,6 @@ public class CartController {
+     public String addCart(ShopCart shopCart, HttpServletRequest request) {
+         HttpSession session = request.getSession();
+         User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return "redirect:/login";
+-        }
+         //判断是否已经加入购物车
+         ShopCart shopCart1 = shopCartService.selectCartByKey(new ShopCartKey(user.getUserid(), shopCart.getGoodsid()));
+         if (shopCart1 != null) {
+@@ -54,10 +51,6 @@ public class CartController {
+ 
+     @RequestMapping("/showcart")
+     public String showCart(HttpSession session) {
+-        User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return "redirect:/login";
+-        }
+         return "shopcart";
+     }
+ 
+@@ -65,9 +58,6 @@ public class CartController {
+     @ResponseBody
+     public Msg getCart(HttpSession session) {
+         User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return Msg.fail("请先登录");
+-        }
+ 
+         //获取当前用户的购物车信息
+         ShopCartExample shopCartExample = new ShopCartExample();
+@@ -91,9 +81,6 @@ public class CartController {
+     @ResponseBody
+     public Msg deleteCart(@PathVariable("goodsid")Integer goodsid, HttpSession session) {
+         User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return Msg.fail("请先登录");
+-        }
+ 
+         shopCartService.deleteByKey(new ShopCartKey(user.getUserid(), goodsid));
+         return Msg.success("删除成功");
+@@ -103,9 +90,6 @@ public class CartController {
+     @ResponseBody
+     public Msg updateCart(Integer goodsid,Integer num,HttpSession session) {
+         User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return Msg.fail("请先登录");
+-        }
+         ShopCart shopCart = new ShopCart();
+         shopCart.setUserid(user.getUserid());
+         shopCart.setGoodsid(goodsid);
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index 6aa9b3e..176c2a3 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -86,13 +86,8 @@ public class CustomerController {
+     @RequestMapping("/information")
+     public String information(Model userModel, HttpServletRequest request) {
+         HttpSession session = request.getSession();
+-        User user;
+-        Integer userId;
+-        user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            return "redirect:/login";
+-        }
+-        userId = user.getUserid();
++        User user = (User) session.getAttribute("user");
++        Integer userId = user.getUserid();
+         user = userService.selectByPrimaryKey(userId);
+         userModel.addAttribute("user", user);
+         return "information";
+@@ -129,9 +124,6 @@ public class CustomerController {
+     public String address(HttpServletRequest request, Model addressModel) {
+         HttpSession session = request.getSession();
+         User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            return "redirect:/login";
+-        }
+         AddressExample addressExample = new AddressExample();
+         addressExample.or().andUseridEqualTo(user.getUserid());
+         List<Address> addressList = addressService.getAllAddressByExample(addressExample);
+@@ -141,15 +133,27 @@ public class CustomerController {
+ 
+     @RequestMapping("/saveAddr")
+     @ResponseBody
+-    public Msg saveAddr(Address address) {
+-
++    public Msg saveAddr(Address address, HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        // 校验地址归属：只能修改自己的地址
++        Address existing = addressService.selectByPrimaryKey(address.getAddressid());
++        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该地址");
++        }
++        address.setUserid(user.getUserid());
+         addressService.updateByPrimaryKeySelective(address);
+         return Msg.success("修改成功");
+     }
+ 
+     @RequestMapping("/deleteAddr")
+     @ResponseBody
+-    public Msg deleteAddr(Address address) {
++    public Msg deleteAddr(Address address, HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        // 校验地址归属：只能删除自己的地址
++        Address existing = addressService.selectByPrimaryKey(address.getAddressid());
++        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该地址");
++        }
+         addressService.deleteByPrimaryKey(address.getAddressid());
+         return Msg.success("删除成功");
+     }
+@@ -175,12 +179,7 @@ public class CustomerController {
+     public String list(HttpServletRequest request, Model orderModel) {
+ 
+         HttpSession session = request.getSession();
+-        User user;
+-        user = (User) session.getAttribute("user");
+-
+-        if (user == null) {
+-            return "redirect:/login";
+-        }
++        User user = (User) session.getAttribute("user");
+ 
+         OrderExample orderExample = new OrderExample();
+         orderExample.or().andUseridEqualTo(user.getUserid());
+@@ -219,7 +218,13 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteList")
+     @ResponseBody
+-    public Msg deleteList(Order order) {
++    public Msg deleteList(Order order, HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        // 校验订单归属：只能删除自己的订单
++        Order existing = orderService.selectByPrimaryKey(order.getOrderid());
++        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该订单");
++        }
+         orderService.deleteById(order.getOrderid());
+         return Msg.success("删除成功");
+     }
+@@ -235,9 +240,6 @@ public class CustomerController {
+     public String showFavorite(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletRequest request, Model model) {
+         HttpSession session = request.getSession();
+         User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            return "redirect:/login";
+-        }
+ 
+         //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+@@ -291,11 +293,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/finishList")
+     @ResponseBody
+-    public Msg finishiList(Integer orderid) {
+-        Order order = orderService.selectByPrimaryKey(orderid);
+-        order.setIsreceive(true);
+-        order.setIscomplete(true);
+-        orderService.updateOrderByKey(order);
++    public Msg finishiList(Integer orderid, HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        // 校验订单归属：只能完成自己的订单
++        Order existing = orderService.selectByPrimaryKey(orderid);
++        if (existing == null || !existing.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该订单");
++        }
++        existing.setIsreceive(true);
++        existing.setIscomplete(true);
++        orderService.updateOrderByKey(existing);
+         return Msg.success("完成订单成功");
+     }
+ 
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+index 80d9c9e..658b190 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+@@ -148,11 +148,7 @@ public class FrontGoodsController {
+     @RequestMapping("/collect")
+     @ResponseBody
+     public Msg collectGoods(Integer goodsid, HttpSession session) {
+-        //取登录用户信息,未登录重定向至登录页面
+         User user = (User) session.getAttribute("user");
+-        if(user == null) {
+-            return Msg.fail("收藏失败");
+-        }
+ 
+         //添加收藏
+         Favorite favorite = new Favorite();
+@@ -169,9 +165,6 @@ public class FrontGoodsController {
+     @ResponseBody
+     public Msg deleteFavGoods(Integer goodsid, HttpSession session) {
+         User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            return Msg.fail("取消收藏失败");
+-        }
+ 
+         //删除收藏
+         goodsService.deleteFavByKey(new FavoriteKey(user.getUserid(),goodsid));
+@@ -243,9 +236,6 @@ public class FrontGoodsController {
+     public Msg comment(Comment comment, HttpServletRequest request){
+         HttpSession session=request.getSession();
+         User user=(User) session.getAttribute("user");
+-        if (user == null) {
+-            return Msg.fail("评论失败");
+-        }
+         comment.setUserid(user.getUserid());
+         Date date=new Date();
+         comment.setCommenttime(date);
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..221e83b 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -49,9 +49,6 @@ public class OrderController {
+     public String showOrder(HttpSession session, Model model) {
+ 
+         User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            return "redirect:/login";
+-        }
+ 
+         //查询当前用户的收货地址
+         AddressExample addressExample = new AddressExample();

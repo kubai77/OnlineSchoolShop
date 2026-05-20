@@ -37,10 +37,6 @@ public class GoodsController {
     @RequestMapping("/showjson")
     @ResponseBody
     public Msg getAllGoods(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return Msg.fail("请先登录");
-        }
         //一页显示几个数据
         PageHelper.startPage(pn, 10);
 
@@ -56,11 +52,6 @@ public class GoodsController {
 
     @RequestMapping("/show")
     public String goodsManage(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) throws IOException {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
-
         List<Category> categoryList = cateService.selectByExample(new CategoryExample());
         model.addAttribute("categoryList", categoryList);
 
@@ -69,11 +60,6 @@ public class GoodsController {
 
     @RequestMapping("/add")
     public String showAdd(@ModelAttribute("succeseMsg") String msg, Model model, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
-
         if (!msg.equals("")) {
             model.addAttribute("msg", msg);
         }
@@ -89,11 +75,6 @@ public class GoodsController {
     @RequestMapping(value = "/update", method = RequestMethod.POST)
     @ResponseBody
     public Msg updateGoods(Goods goods, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return Msg.fail("请先登录");
-        }
-        /* goods.setGoodsid(goodsid);*/
         goodsService.updateGoodsById(goods);
         return Msg.success("更新成功!");
     }
@@ -133,10 +114,6 @@ public class GoodsController {
 
     @RequestMapping("/addCategory")
     public String addcategory(@ModelAttribute("succeseMsg") String msg, Model model, HttpSession session) {
-        Admin admin = (Admin) session.getAttribute("admin");
-        if (admin == null) {
-            return "redirect:/admin/login";
-        }
         CategoryExample categoryExample = new CategoryExample();
         categoryExample.or();
         List<Category> categoryList;
