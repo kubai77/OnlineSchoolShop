@@ -34,6 +34,9 @@ public class GoodsController {
     @Autowired
     private GoodsService goodsService;
 
+    @Autowired
+    private ImageUtil imageUtil;
+
     @RequestMapping("/showjson")
     @ResponseBody
     public Msg getAllGoods(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) {
@@ -118,7 +121,7 @@ public class GoodsController {
         for (MultipartFile multipartFile : fileToUpload) {
             String fileName = goods.getGoodsname()+ multipartFile.getOriginalFilename();
             if (multipartFile != null) {
-               String ImagePath= ImageUtil.imagePath(multipartFile,fileName);
+               String ImagePath= imageUtil.imagePath(multipartFile,fileName);
                System.out.println("最后存入数据的图片名字为:"+ImagePath);
                 //把图片路径存入数据库中
               goodsService.addImagePath(new ImagePath(null, goods.getGoodsid(), ImagePath));

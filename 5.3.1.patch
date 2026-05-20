@@ -1,0 +1,223 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..a6b1f41 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,37 +1,64 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import com.zhang.ssmschoolshop.interceptor.AdminInterceptor;
++import com.zhang.ssmschoolshop.interceptor.UserInterceptor;
++import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ 
+ 
+-/**
+- * @author created by CodingZhangxin
+- * @version v.0.1
+- * @Description TODO
+- * @date 2019/5/10
+- * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
+- **/
+-
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
++    @Autowired
++    private UploadProperties uploadProperties;
+ 
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++        // 后台管理员拦截：/admin/** 下除登录/登出外全部需要 admin session
++        registry.addInterceptor(new AdminInterceptor())
++                .addPathPatterns("/admin/**")
++                .excludePathPatterns(
++                        "/admin/login",
++                        "/admin/confirmLogin",
++                        "/admin/logout"
++                );
++
++        // 前台用户拦截：用户中心、购物车、订单、收藏、评论等需要登录的接口
++        registry.addInterceptor(new UserInterceptor())
++                .addPathPatterns(
++                        "/information",
++                        "/saveInfo",
++                        "/savePsw",
++                        "/info/**",
++                        "/saveAddr",
++                        "/deleteAddr",
++                        "/insertAddr",
++                        "/order",
++                        "/orderFinish",
++                        "/addCart",
++                        "/showcart",
++                        "/cartjson",
++                        "/deleteCart/**",
++                        "/update",
++                        "/collect",
++                        "/deleteCollect",
++                        "/comment"
++                );
++    }
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+-        String os = System.getProperty("os.name");
+-        String pathPatterns="/pictures/**";
+-        String pathAbsolute="file:D:/upload/";
+-        if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            pathAbsolute="file:/usr/upload/";
++        String pathPatterns = uploadProperties.getAccessPathPattern();
++        String path = uploadProperties.getPath();
++        if (!path.endsWith("/")) {
++            path = path + "/";
+         }
++        String pathAbsolute = "file:" + path;
+         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+-
+     }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+index 03dd96a..5dc4ba8 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/GoodsController.java
+@@ -34,6 +34,9 @@ public class GoodsController {
+     @Autowired
+     private GoodsService goodsService;
+ 
++    @Autowired
++    private ImageUtil imageUtil;
++
+     @RequestMapping("/showjson")
+     @ResponseBody
+     public Msg getAllGoods(@RequestParam(value = "page", defaultValue = "1") Integer pn, HttpServletResponse response, Model model, HttpSession session) {
+@@ -118,7 +121,7 @@ public class GoodsController {
+         for (MultipartFile multipartFile : fileToUpload) {
+             String fileName = goods.getGoodsname()+ multipartFile.getOriginalFilename();
+             if (multipartFile != null) {
+-               String ImagePath= ImageUtil.imagePath(multipartFile,fileName);
++               String ImagePath= imageUtil.imagePath(multipartFile,fileName);
+                System.out.println("最后存入数据的图片名字为:"+ImagePath);
+                 //把图片路径存入数据库中
+               goodsService.addImagePath(new ImagePath(null, goods.getGoodsid(), ImagePath));
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+index cb668a4..0b2500e 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+@@ -1,51 +1,41 @@
+-package com.zhang.ssmschoolshop.util;
+-
+-import org.springframework.web.multipart.MultipartFile;
+-
+-import java.io.File;
+-import java.io.IOException;
+-import java.util.UUID;
+-
+-/**
+- * @author created by Zhangdazhuang
+- * @version v.0.1
+- * @Description 根据操作系统的不同保存到不同路径
+- * @date 2019/4/30
+- * @备注
+- **/
+-public class ImageUtil {
+-
+-    public static String imagePath(MultipartFile file, String shopName) {
+-        if (file.isEmpty()) {
+-            return "false";
+-        }
+-        int size = (int) file.getSize();
+-        String path = "D:/upload";
+-        String os = System.getProperty("os.name");
+-        if(!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            path="/usr/upload";
+-        }
+-        String fileName=UUID.randomUUID().toString().substring(0,4)+shopName;
+-        File dest = new File(path + "/" +fileName);
+-        System.out.println("保存的绝对路径为:"+dest);
+-        if (!dest.getParentFile().exists()) { //判断文件父目录是否存在
+-            dest.getParentFile().mkdir();
+-        }
+-        try {
+-            //根据系统的不同，保存到不同的路径
+-            file.transferTo(dest);
+-            return fileName;
+-        } catch (IllegalStateException e) {
+-            // TODO Auto-generated catch block
+-            e.printStackTrace();
+-            return "false";
+-        } catch (IOException e) {
+-            // TODO Auto-generated catch block
+-            e.printStackTrace();
+-            return "false";
+-        }
+-
+-
+-    }
+-}
++package com.zhang.ssmschoolshop.util;
++
++import com.zhang.ssmschoolshop.config.UploadProperties;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.stereotype.Component;
++import org.springframework.web.multipart.MultipartFile;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.UUID;
++
++@Component
++public class ImageUtil {
++
++    @Autowired
++    private UploadProperties uploadProperties;
++
++    public String imagePath(MultipartFile file, String shopName) {
++        if (file.isEmpty()) {
++            return "false";
++        }
++        int size = (int) file.getSize();
++        String path = uploadProperties.getPath();
++        String fileName = UUID.randomUUID().toString().substring(0, 4) + shopName;
++        File dest = new File(path + "/" + fileName);
++        System.out.println("保存的绝对路径为:" + dest);
++        if (!dest.getParentFile().exists()) {
++            dest.getParentFile().mkdirs();
++        }
++        try {
++            file.transferTo(dest);
++            return fileName;
++        } catch (IllegalStateException e) {
++            e.printStackTrace();
++            return "false";
++        } catch (IOException e) {
++            e.printStackTrace();
++            return "false";
++        }
++    }
++}
+diff --git a/SpringbootSchoolShop/src/main/resources/application.yml b/SpringbootSchoolShop/src/main/resources/application.yml
+index d7d1769..362d8a3 100644
+--- a/SpringbootSchoolShop/src/main/resources/application.yml
++++ b/SpringbootSchoolShop/src/main/resources/application.yml
+@@ -6,6 +6,10 @@ server:
+       max-file-size: 10MB  #单个文件
+       max-request-size: 100MB #总文件大小
+ 
++upload:
++  path: D:/upload
++  access-path-pattern: /pictures/**
++
+ spring:
+      datasource:
+         driver-class-name: com.mysql.cj.jdbc.Driver
