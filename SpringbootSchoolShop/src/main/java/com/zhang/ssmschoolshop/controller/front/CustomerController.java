@@ -141,15 +141,33 @@ public class CustomerController {
 
     @RequestMapping("/saveAddr")
     @ResponseBody
-    public Msg saveAddr(Address address) {
-
+    public Msg saveAddr(Address address, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        Address oldAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (oldAddress == null || !oldAddress.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权修改");
+        }
+        address.setUserid(user.getUserid());
         addressService.updateByPrimaryKeySelective(address);
         return Msg.success("修改成功");
     }
 
     @RequestMapping("/deleteAddr")
     @ResponseBody
-    public Msg deleteAddr(Address address) {
+    public Msg deleteAddr(Address address, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        Address oldAddress = addressService.selectByPrimaryKey(address.getAddressid());
+        if (oldAddress == null || !oldAddress.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权删除");
+        }
         addressService.deleteByPrimaryKey(address.getAddressid());
         return Msg.success("删除成功");
     }
@@ -219,7 +237,16 @@ public class CustomerController {
 
     @RequestMapping("/deleteList")
     @ResponseBody
-    public Msg deleteList(Order order) {
+    public Msg deleteList(Order order, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
+        Order oldOrder = orderService.selectByPrimaryKey(order.getOrderid());
+        if (oldOrder == null || !oldOrder.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权删除");
+        }
         orderService.deleteById(order.getOrderid());
         return Msg.success("删除成功");
     }
@@ -291,8 +318,16 @@ public class CustomerController {
 
     @RequestMapping("/finishList")
     @ResponseBody
-    public Msg finishiList(Integer orderid) {
+    public Msg finishiList(Integer orderid, HttpServletRequest request) {
+        HttpSession session = request.getSession();
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return Msg.fail("请先登录");
+        }
         Order order = orderService.selectByPrimaryKey(orderid);
+        if (order == null || !order.getUserid().equals(user.getUserid())) {
+            return Msg.fail("无权操作");
+        }
         order.setIsreceive(true);
         order.setIscomplete(true);
         orderService.updateOrderByKey(order);

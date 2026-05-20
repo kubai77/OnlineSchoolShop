@@ -1,0 +1,115 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..2fe76f0 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,7 +1,10 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import com.zhang.ssmschoolshop.interceptor.AdminInterceptor;
++import com.zhang.ssmschoolshop.interceptor.UserInterceptor;
+ import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ 
+@@ -19,7 +22,21 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
+-
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++        // 后台管理员拦截器
++        registry.addInterceptor(new AdminInterceptor())
++                .addPathPatterns("/admin/**")
++                .excludePathPatterns("/admin/login", "/admin/confirmLogin", "/admin/logout", "/admin/css/**", "/admin/js/**", "/admin/img/**", "/admin/fonts/**");
++
++        // 前台用户中心拦截器
++        registry.addInterceptor(new UserInterceptor())
++                .addPathPatterns(
++                        "/information", "/saveInfo", "/info/address", "/saveAddr", "/deleteAddr", "/insertAddr",
++                        "/info/list", "/deleteList", "/info/favorite", "/savePsw", "/finishList", "/collect", "/deleteCollect",
++                        "/addCart", "/showcart", "/cartjson", "/update", "/deleteCart/**", "/order", "/orderFinish"
++                );
++    }
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index 6aa9b3e..09c0f2a 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -141,15 +141,33 @@ public class CustomerController {
+ 
+     @RequestMapping("/saveAddr")
+     @ResponseBody
+-    public Msg saveAddr(Address address) {
+-
++    public Msg saveAddr(Address address, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return Msg.fail("请先登录");
++        }
++        Address oldAddress = addressService.selectByPrimaryKey(address.getAddressid());
++        if (oldAddress == null || !oldAddress.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权修改");
++        }
++        address.setUserid(user.getUserid());
+         addressService.updateByPrimaryKeySelective(address);
+         return Msg.success("修改成功");
+     }
+ 
+     @RequestMapping("/deleteAddr")
+     @ResponseBody
+-    public Msg deleteAddr(Address address) {
++    public Msg deleteAddr(Address address, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return Msg.fail("请先登录");
++        }
++        Address oldAddress = addressService.selectByPrimaryKey(address.getAddressid());
++        if (oldAddress == null || !oldAddress.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除");
++        }
+         addressService.deleteByPrimaryKey(address.getAddressid());
+         return Msg.success("删除成功");
+     }
+@@ -219,7 +237,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteList")
+     @ResponseBody
+-    public Msg deleteList(Order order) {
++    public Msg deleteList(Order order, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return Msg.fail("请先登录");
++        }
++        Order oldOrder = orderService.selectByPrimaryKey(order.getOrderid());
++        if (oldOrder == null || !oldOrder.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除");
++        }
+         orderService.deleteById(order.getOrderid());
+         return Msg.success("删除成功");
+     }
+@@ -291,8 +318,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/finishList")
+     @ResponseBody
+-    public Msg finishiList(Integer orderid) {
++    public Msg finishiList(Integer orderid, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return Msg.fail("请先登录");
++        }
+         Order order = orderService.selectByPrimaryKey(orderid);
++        if (order == null || !order.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作");
++        }
+         order.setIsreceive(true);
+         order.setIscomplete(true);
+         orderService.updateOrderByKey(order);

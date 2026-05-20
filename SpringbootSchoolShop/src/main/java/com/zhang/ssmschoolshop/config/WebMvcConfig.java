@@ -1,7 +1,10 @@
 package com.zhang.ssmschoolshop.config;
 
 
+import com.zhang.ssmschoolshop.interceptor.AdminInterceptor;
+import com.zhang.ssmschoolshop.interceptor.UserInterceptor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -19,7 +22,21 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // 后台管理员拦截器
+        registry.addInterceptor(new AdminInterceptor())
+                .addPathPatterns("/admin/**")
+                .excludePathPatterns("/admin/login", "/admin/confirmLogin", "/admin/logout", "/admin/css/**", "/admin/js/**", "/admin/img/**", "/admin/fonts/**");
 
+        // 前台用户中心拦截器
+        registry.addInterceptor(new UserInterceptor())
+                .addPathPatterns(
+                        "/information", "/saveInfo", "/info/address", "/saveAddr", "/deleteAddr", "/insertAddr",
+                        "/info/list", "/deleteList", "/info/favorite", "/savePsw", "/finishList", "/collect", "/deleteCollect",
+                        "/addCart", "/showcart", "/cartjson", "/update", "/deleteCart/**", "/order", "/orderFinish"
+                );
+    }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
