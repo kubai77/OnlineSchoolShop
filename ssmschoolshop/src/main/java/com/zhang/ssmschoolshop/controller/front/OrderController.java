@@ -35,6 +35,9 @@ public class OrderController {
     @Autowired
     private ActivityService activityService;
 
+    @Autowired
+    private PriceCalculatorService priceCalculatorService;
+
     @RequestMapping("/order")
     public String showOrder(HttpSession session, Model model) {
 
@@ -69,22 +72,13 @@ public class OrderController {
             goods.setImagePaths(imagePathList);
             goods.setNum(cart.getGoodsnum());
 
-            //活动信息
             Activity activity = activityService.selectByKey(goods.getActivityid());
             goods.setActivity(activity);
 
-            if(activity.getDiscount() != 1) {
-                goods.setNewPrice(goods.getPrice()*goods.getNum()* activity.getDiscount());
-            } else if(activity.getFullnum() != null) {
-                if (goods.getNum() >= activity.getFullnum()) {
-                    goods.setNewPrice((float) (goods.getPrice()*(goods.getNum()-activity.getReducenum())));
-                } else {
-                    goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-                }
-            } else {
-                goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-            }
-            totalPrice = totalPrice + goods.getNewPrice();
+            Float newPrice = priceCalculatorService.calculateNewPrice(goods, activity);
+            goods.setNewPrice(newPrice);
+            
+            totalPrice = totalPrice + newPrice;
             oldTotalPrice = oldTotalPrice + goods.getNum() * goods.getPrice();
             goodsAndImage.add(goods);
         }
