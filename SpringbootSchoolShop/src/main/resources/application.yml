@@ -1,3 +1,7 @@
+# 图片上传路径配置（根据部署环境修改）
+upload:
+  path: /usr/upload
+
 server:
   port: 8081
   servlet:
