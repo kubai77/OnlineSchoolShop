@@ -33,4 +33,39 @@
         <property name="maxInMemorySize" value="4096"/>
     </bean>
 
+    <!-- ==================== 统一权限拦截器 ==================== -->
+
+    <!-- 后台管理拦截器：/admin/** 默认要求管理员登录，放行登录相关接口 -->
+    <mvc:interceptors>
+        <mvc:interceptor>
+            <mvc:mapping path="/admin/**"/>
+            <mvc:exclude-mapping path="/admin/login"/>
+            <mvc:exclude-mapping path="/admin/confirmLogin"/>
+            <bean class="com.zhang.ssmschoolshop.interceptor.AdminLoginInterceptor"/>
+        </mvc:interceptor>
+
+        <!-- 前台用户中心拦截器：用户相关操作要求用户登录 -->
+        <mvc:interceptor>
+            <mvc:mapping path="/info/**"/>
+            <mvc:mapping path="/saveInfo"/>
+            <mvc:mapping path="/saveAddr"/>
+            <mvc:mapping path="/deleteAddr"/>
+            <mvc:mapping path="/insertAddr"/>
+            <mvc:mapping path="/savePsw"/>
+            <mvc:mapping path="/deleteList"/>
+            <mvc:mapping path="/finishList"/>
+            <mvc:mapping path="/addCart"/>
+            <mvc:mapping path="/showcart"/>
+            <mvc:mapping path="/cartjson"/>
+            <mvc:mapping path="/update"/>
+            <mvc:mapping path="/deleteCart/**"/>
+            <mvc:mapping path="/order"/>
+            <mvc:mapping path="/orderFinish"/>
+            <mvc:mapping path="/collect"/>
+            <mvc:mapping path="/deleteCollect"/>
+            <mvc:mapping path="/comment"/>
+            <bean class="com.zhang.ssmschoolshop.interceptor.UserLoginInterceptor"/>
+        </mvc:interceptor>
+    </mvc:interceptors>
+
 </beans>

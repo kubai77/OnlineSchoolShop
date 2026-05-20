@@ -1,0 +1,248 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..9f4ff24 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,7 +1,10 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import com.zhang.ssmschoolshop.interceptor.AdminLoginInterceptor;
++import com.zhang.ssmschoolshop.interceptor.UserLoginInterceptor;
+ import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ 
+@@ -20,6 +23,36 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
+ 
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++        // 后台管理拦截器：/admin/** 默认要求管理员登录，放行登录相关接口
++        registry.addInterceptor(new AdminLoginInterceptor())
++                .addPathPatterns("/admin/**")
++                .excludePathPatterns("/admin/login", "/admin/confirmLogin");
++
++        // 前台用户中心拦截器：用户相关操作要求用户登录
++        registry.addInterceptor(new UserLoginInterceptor())
++                .addPathPatterns(
++                        "/info/**",
++                        "/saveInfo",
++                        "/saveAddr",
++                        "/deleteAddr",
++                        "/insertAddr",
++                        "/savePsw",
++                        "/deleteList",
++                        "/finishList",
++                        "/addCart",
++                        "/showcart",
++                        "/cartjson",
++                        "/update",
++                        "/deleteCart/**",
++                        "/order",
++                        "/orderFinish",
++                        "/collect",
++                        "/deleteCollect",
++                        "/comment"
++                );
++    }
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index 6aa9b3e..bb4f2f8 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -141,7 +141,15 @@ public class CustomerController {
+ 
+     @RequestMapping("/saveAddr")
+     @ResponseBody
+-    public Msg saveAddr(Address address) {
++    public Msg saveAddr(Address address, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++
++        // 校验地址归属：查询原地址是否属于当前用户
++        Address dbAddr = addressService.selectByPrimaryKey(address.getAddressid());
++        if (dbAddr == null || !dbAddr.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权修改该地址");
++        }
+ 
+         addressService.updateByPrimaryKeySelective(address);
+         return Msg.success("修改成功");
+@@ -149,7 +157,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteAddr")
+     @ResponseBody
+-    public Msg deleteAddr(Address address) {
++    public Msg deleteAddr(Address address, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++
++        // 校验地址归属：查询地址是否属于当前用户
++        Address dbAddr = addressService.selectByPrimaryKey(address.getAddressid());
++        if (dbAddr == null || !dbAddr.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除该地址");
++        }
++
+         addressService.deleteByPrimaryKey(address.getAddressid());
+         return Msg.success("删除成功");
+     }
+@@ -219,7 +236,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteList")
+     @ResponseBody
+-    public Msg deleteList(Order order) {
++    public Msg deleteList(Order order, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++
++        // 校验订单归属：查询订单是否属于当前用户
++        Order dbOrder = orderService.selectByPrimaryKey(order.getOrderid());
++        if (dbOrder == null || !dbOrder.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除该订单");
++        }
++
+         orderService.deleteById(order.getOrderid());
+         return Msg.success("删除成功");
+     }
+@@ -291,8 +317,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/finishList")
+     @ResponseBody
+-    public Msg finishiList(Integer orderid) {
++    public Msg finishiList(Integer orderid, HttpServletRequest request) {
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++
++        // 校验订单归属：查询订单是否属于当前用户
+         Order order = orderService.selectByPrimaryKey(orderid);
++        if (order == null || !order.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该订单");
++        }
++
+         order.setIsreceive(true);
+         order.setIscomplete(true);
+         orderService.updateOrderByKey(order);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index e38ef88..80d69ec 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -143,7 +143,15 @@ public class CustomerController {
+ 
+     @RequestMapping("/saveAddr")
+     @ResponseBody
+-    public Msg saveAddr(Address address){
++    public Msg saveAddr(Address address, HttpServletRequest request){
++        HttpSession session=request.getSession();
++        User user=(User) session.getAttribute("user");
++
++        // 校验地址归属：查询原地址是否属于当前用户
++        Address dbAddr = addressService.selectByPrimaryKey(address.getAddressid());
++        if (dbAddr == null || !dbAddr.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权修改该地址");
++        }
+ 
+         addressService.updateByPrimaryKeySelective(address);
+         return Msg.success("修改成功");
+@@ -151,7 +159,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteAddr")
+     @ResponseBody
+-    public Msg deleteAddr(Address address){
++    public Msg deleteAddr(Address address, HttpServletRequest request){
++        HttpSession session=request.getSession();
++        User user=(User) session.getAttribute("user");
++
++        // 校验地址归属：查询地址是否属于当前用户
++        Address dbAddr = addressService.selectByPrimaryKey(address.getAddressid());
++        if (dbAddr == null || !dbAddr.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除该地址");
++        }
++
+         addressService.deleteByPrimaryKey(address.getAddressid());
+         return Msg.success("删除成功");
+     }
+@@ -225,7 +242,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/deleteList")
+     @ResponseBody
+-    public Msg deleteList(Order order){
++    public Msg deleteList(Order order, HttpServletRequest request){
++        HttpSession session=request.getSession();
++        User user=(User) session.getAttribute("user");
++
++        // 校验订单归属：查询订单是否属于当前用户
++        Order dbOrder = orderService.selectByPrimaryKey(order.getOrderid());
++        if (dbOrder == null || !dbOrder.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权删除该订单");
++        }
++
+         orderService.deleteById(order.getOrderid());
+         return Msg.success("删除成功");
+     }
+@@ -292,8 +318,16 @@ public class CustomerController {
+ 
+     @RequestMapping("/finishList")
+     @ResponseBody
+-    public Msg finishiList(Integer orderid){
+-        Order order=orderService.selectByPrimaryKey(orderid);
++    public Msg finishiList(Integer orderid, HttpServletRequest request){
++        HttpSession session = request.getSession();
++        User user = (User) session.getAttribute("user");
++
++        // 校验订单归属：查询订单是否属于当前用户
++        Order order = orderService.selectByPrimaryKey(orderid);
++        if (order == null || !order.getUserid().equals(user.getUserid())) {
++            return Msg.fail("无权操作该订单");
++        }
++
+         order.setIsreceive(true);
+         order.setIscomplete(true);
+         orderService.updateOrderByKey(order);
+diff --git a/ssmschoolshop/src/main/resources/spring-mvc.xml b/ssmschoolshop/src/main/resources/spring-mvc.xml
+index 64bbb5f..fb1c8eb 100644
+--- a/ssmschoolshop/src/main/resources/spring-mvc.xml
++++ b/ssmschoolshop/src/main/resources/spring-mvc.xml
+@@ -33,4 +33,39 @@
+         <property name="maxInMemorySize" value="4096"/>
+     </bean>
+ 
++    <!-- ==================== 统一权限拦截器 ==================== -->
++
++    <!-- 后台管理拦截器：/admin/** 默认要求管理员登录，放行登录相关接口 -->
++    <mvc:interceptors>
++        <mvc:interceptor>
++            <mvc:mapping path="/admin/**"/>
++            <mvc:exclude-mapping path="/admin/login"/>
++            <mvc:exclude-mapping path="/admin/confirmLogin"/>
++            <bean class="com.zhang.ssmschoolshop.interceptor.AdminLoginInterceptor"/>
++        </mvc:interceptor>
++
++        <!-- 前台用户中心拦截器：用户相关操作要求用户登录 -->
++        <mvc:interceptor>
++            <mvc:mapping path="/info/**"/>
++            <mvc:mapping path="/saveInfo"/>
++            <mvc:mapping path="/saveAddr"/>
++            <mvc:mapping path="/deleteAddr"/>
++            <mvc:mapping path="/insertAddr"/>
++            <mvc:mapping path="/savePsw"/>
++            <mvc:mapping path="/deleteList"/>
++            <mvc:mapping path="/finishList"/>
++            <mvc:mapping path="/addCart"/>
++            <mvc:mapping path="/showcart"/>
++            <mvc:mapping path="/cartjson"/>
++            <mvc:mapping path="/update"/>
++            <mvc:mapping path="/deleteCart/**"/>
++            <mvc:mapping path="/order"/>
++            <mvc:mapping path="/orderFinish"/>
++            <mvc:mapping path="/collect"/>
++            <mvc:mapping path="/deleteCollect"/>
++            <mvc:mapping path="/comment"/>
++            <bean class="com.zhang.ssmschoolshop.interceptor.UserLoginInterceptor"/>
++        </mvc:interceptor>
++    </mvc:interceptors>
++
+ </beans>
+\ No newline at end of file
