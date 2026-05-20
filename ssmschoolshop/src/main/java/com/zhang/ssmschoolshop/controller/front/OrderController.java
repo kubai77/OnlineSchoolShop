@@ -73,17 +73,10 @@ public class OrderController {
             Activity activity = activityService.selectByKey(goods.getActivityid());
             goods.setActivity(activity);
 
-            if(activity.getDiscount() != 1) {
-                goods.setNewPrice(goods.getPrice()*goods.getNum()* activity.getDiscount());
-            } else if(activity.getFullnum() != null) {
-                if (goods.getNum() >= activity.getFullnum()) {
-                    goods.setNewPrice((float) (goods.getPrice()*(goods.getNum()-activity.getReducenum())));
-                } else {
-                    goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-                }
-            } else {
-                goods.setNewPrice((float) (goods.getPrice()*goods.getNum()));
-            }
+            //处理折扣信息，使用独立的计算模块
+            float calculatedPrice = com.zhang.ssmschoolshop.util.PriceCalculator.calculateNewPrice(goods, activity);
+            goods.setNewPrice(calculatedPrice);
+            
             totalPrice = totalPrice + goods.getNewPrice();
             oldTotalPrice = oldTotalPrice + goods.getNum() * goods.getPrice();
             goodsAndImage.add(goods);
