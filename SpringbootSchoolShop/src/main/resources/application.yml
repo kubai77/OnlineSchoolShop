@@ -6,6 +6,9 @@ server:
       max-file-size: 10MB  #单个文件
       max-request-size: 100MB #总文件大小
 
+file:
+  upload-path: D:/upload/
+
 spring:
      datasource:
         driver-class-name: com.mysql.cj.jdbc.Driver

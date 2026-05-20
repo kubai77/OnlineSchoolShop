@@ -1,0 +1,109 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..3b06681 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,6 +1,7 @@
+ package com.zhang.ssmschoolshop.config;
+ 
+ 
++import org.springframework.beans.factory.annotation.Value;
+ import org.springframework.context.annotation.Configuration;
+ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+@@ -12,26 +13,22 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+  * @Description TODO
+  * @date 2019/5/10
+  * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
+  **/
+ 
+ @Configuration
+ public class WebMvcConfig implements WebMvcConfigurer {
+ 
+-
++    @Value("${file.upload-path}")
++    private String uploadPath;
+ 
+     @Override
+     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+-        String os = System.getProperty("os.name");
+         String pathPatterns="/pictures/**";
+-        String pathAbsolute="file:D:/upload/";
+-        if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            pathAbsolute="file:/usr/upload/";
++        String pathAbsolute="file:" + uploadPath;
++        if (!pathAbsolute.endsWith("/")) {
++            pathAbsolute += "/";
+         }
+         registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+-
+     }
+ 
+ }
+\ No newline at end of file
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+index cb668a4..6d92c1f 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+@@ -1,5 +1,7 @@
+ package com.zhang.ssmschoolshop.util;
+ 
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Component;
+ import org.springframework.web.multipart.MultipartFile;
+ 
+ import java.io.File;
+@@ -9,23 +11,30 @@ import java.util.UUID;
+ /**
+  * @author created by Zhangdazhuang
+  * @version v.0.1
+- * @Description 根据操作系统的不同保存到不同路径
++ * @Description 文件保存工具类
+  * @date 2019/4/30
+  * @备注
+  **/
++@Component
+ public class ImageUtil {
+ 
++    private static String uploadPath;
++
++    @Value("${file.upload-path}")
++    public void setUploadPath(String uploadPath) {
++        ImageUtil.uploadPath = uploadPath;
++    }
++
+     public static String imagePath(MultipartFile file, String shopName) {
+         if (file.isEmpty()) {
+             return "false";
+         }
+-        int size = (int) file.getSize();
+-        String path = "D:/upload";
+-        String os = System.getProperty("os.name");
+-        if(!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            path="/usr/upload";
++        
++        String path = uploadPath;
++        if (path.endsWith("/")) {
++            path = path.substring(0, path.length() - 1);
+         }
++
+         String fileName=UUID.randomUUID().toString().substring(0,4)+shopName;
+         File dest = new File(path + "/" +fileName);
+         System.out.println("保存的绝对路径为:"+dest);
+diff --git a/SpringbootSchoolShop/src/main/resources/application.yml b/SpringbootSchoolShop/src/main/resources/application.yml
+index d7d1769..68d0650 100644
+--- a/SpringbootSchoolShop/src/main/resources/application.yml
++++ b/SpringbootSchoolShop/src/main/resources/application.yml
+@@ -6,6 +6,9 @@ server:
+       max-file-size: 10MB  #单个文件
+       max-request-size: 100MB #总文件大小
+ 
++file:
++  upload-path: D:/upload/
++
+ spring:
+      datasource:
+         driver-class-name: com.mysql.cj.jdbc.Driver
