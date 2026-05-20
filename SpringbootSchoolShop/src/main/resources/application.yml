@@ -55,6 +55,7 @@ mail:
   receive:  1452212101@qq.com #收件者邮箱
   receive2: 1452212102@qq.com
   test-connection: false
+  enabled: false
 
 
 

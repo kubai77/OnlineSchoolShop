@@ -145,8 +145,8 @@ public class OrderController {
         for (ShopCart cart : shopCart) {
             orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
         }
-        // 购买成功通知管理员
-       // emailService.sendEmailToAdmin();
+        // 购买成功通知管理员（邮件发送受 mail.enabled 配置项控制）
+        emailService.sendEmailToAdmin(user.getEmail());
         return Msg.success("购买成功");
     }
 

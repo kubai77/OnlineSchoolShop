@@ -7,6 +7,7 @@ import com.zhang.ssmschoolshop.entity.*;
 import com.zhang.ssmschoolshop.service.EmailService;
 import com.zhang.ssmschoolshop.service.GoodsService;
 import com.zhang.ssmschoolshop.service.OrderService;
+import com.zhang.ssmschoolshop.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,6 +31,9 @@ public class AdminOrderController {
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private UserService userService;
 
     @RequestMapping("/send")
     public String sendOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
@@ -91,12 +95,25 @@ public class AdminOrderController {
         if (admin == null) {
             return "redirect:/admin/login";
         }
+        // 查询订单以获取用户信息
+        OrderExample orderEx = new OrderExample();
+        orderEx.or().andOrderidEqualTo(orderid);
+        List<Order> orderList = orderService.selectOrderByExample(orderEx);
+        if (orderList.isEmpty()) {
+            return "redirect:/admin/order/send";
+        }
+        Order orderData = orderList.get(0);
+        // 获取用户邮箱并发送邮件通知
+        User user = userService.selectByPrimaryKey(orderData.getUserid());
+        if (user != null) {
+            // 管理员发货后通知用户（邮件发送受 mail.enabled 配置项控制）
+            emailService.sendEmailToUser(user.getEmail());
+        }
+        // 更新发货状态
         Order order = new Order();
         order.setOrderid(orderid);
         order.setIssend(true);
         orderService.updateOrderByKey(order);
-        // 发送信息给用户 管理员已经发货了
-        // emailService.sendEmailToUser();
         return "redirect:/admin/order/send";
     }
 

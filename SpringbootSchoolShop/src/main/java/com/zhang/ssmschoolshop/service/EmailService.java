@@ -7,13 +7,14 @@ package com.zhang.ssmschoolshop.service;
  */
 public interface EmailService {
     /**
-     * 用户购买成功后 发送邮件给管理员
+     * 用户购买成功后发送邮件通知管理员
+     * @param userEmail 下单用户的邮箱，用于记录来源（可选）
      */
-    public void sendEmailToAdmin();
+    void sendEmailToAdmin(String userEmail);
 
     /**
-     * 管理员发货后 发送邮件给用户
+     * 管理员发货后发送邮件通知用户
+     * @param userEmail 要通知的用户的邮箱
      */
-    public void sendEmailToUser();
-
+    void sendEmailToUser(String userEmail);
 }
