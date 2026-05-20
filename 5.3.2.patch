@@ -1,0 +1,791 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+index ffb3567..0e8ed98 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/config/WebMvcConfig.java
+@@ -1,37 +1,23 @@
+-package com.zhang.ssmschoolshop.config;
+-
+-
+-import org.springframework.context.annotation.Configuration;
+-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+-
+-
+-/**
+- * @author created by CodingZhangxin
+- * @version v.0.1
+- * @Description TODO
+- * @date 2019/5/10
+- * @备注  springboot内置tomcat配置虚拟路径
+- *      linux： /usr/upload  /pictures
+- *      window:  d:/upload  /pictures
+- **/
+-
+-@Configuration
+-public class WebMvcConfig implements WebMvcConfigurer {
+-
+-
+-
+-    @Override
+-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+-        String os = System.getProperty("os.name");
+-        String pathPatterns="/pictures/**";
+-        String pathAbsolute="file:D:/upload/";
+-        if (!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            pathAbsolute="file:/usr/upload/";
+-        }
+-        registry.addResourceHandler(pathPatterns).addResourceLocations(pathAbsolute);
+-
+-    }
+-
+-}
+\ No newline at end of file
++package com.zhang.ssmschoolshop.config;
++
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
++import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
++
++@Configuration
++public class WebMvcConfig implements WebMvcConfigurer {
++
++    private final ImageStorageProperties imageStorageProperties;
++
++    @Autowired
++    public WebMvcConfig(ImageStorageProperties imageStorageProperties) {
++        this.imageStorageProperties = imageStorageProperties;
++    }
++
++    @Override
++    public void addResourceHandlers(ResourceHandlerRegistry registry) {
++        registry.addResourceHandler("/pictures/**")
++                .addResourceLocations(imageStorageProperties.getResourceLocation());
++    }
++}
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+index cb668a4..750bb89 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/util/ImageUtil.java
+@@ -1,51 +1,48 @@
+-package com.zhang.ssmschoolshop.util;
+-
+-import org.springframework.web.multipart.MultipartFile;
+-
+-import java.io.File;
+-import java.io.IOException;
+-import java.util.UUID;
+-
+-/**
+- * @author created by Zhangdazhuang
+- * @version v.0.1
+- * @Description 根据操作系统的不同保存到不同路径
+- * @date 2019/4/30
+- * @备注
+- **/
+-public class ImageUtil {
+-
+-    public static String imagePath(MultipartFile file, String shopName) {
+-        if (file.isEmpty()) {
+-            return "false";
+-        }
+-        int size = (int) file.getSize();
+-        String path = "D:/upload";
+-        String os = System.getProperty("os.name");
+-        if(!os.toLowerCase().startsWith("windows")){
+-            // todo mac需要修改地址
+-            path="/usr/upload";
+-        }
+-        String fileName=UUID.randomUUID().toString().substring(0,4)+shopName;
+-        File dest = new File(path + "/" +fileName);
+-        System.out.println("保存的绝对路径为:"+dest);
+-        if (!dest.getParentFile().exists()) { //判断文件父目录是否存在
+-            dest.getParentFile().mkdir();
+-        }
+-        try {
+-            //根据系统的不同，保存到不同的路径
+-            file.transferTo(dest);
+-            return fileName;
+-        } catch (IllegalStateException e) {
+-            // TODO Auto-generated catch block
+-            e.printStackTrace();
+-            return "false";
+-        } catch (IOException e) {
+-            // TODO Auto-generated catch block
+-            e.printStackTrace();
+-            return "false";
+-        }
+-
+-
+-    }
+-}
++package com.zhang.ssmschoolshop.util;
++
++import com.zhang.ssmschoolshop.config.ImageStorageProperties;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.stereotype.Component;
++import org.springframework.web.multipart.MultipartFile;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.UUID;
++
++@Component
++public class ImageUtil {
++
++    private static ImageStorageProperties imageStorageProperties;
++
++    @Autowired
++    public ImageUtil(ImageStorageProperties imageStorageProperties) {
++        ImageUtil.imageStorageProperties = imageStorageProperties;
++    }
++
++    public static String imagePath(MultipartFile file, String shopName) {
++        if (file.isEmpty()) {
++            return "false";
++        }
++        String uploadDir = imageStorageProperties == null ? "" : imageStorageProperties.getUploadDir();
++        if (uploadDir.isEmpty()) {
++            return "false";
++        }
++        String fileName = UUID.randomUUID().toString().substring(0, 4) + shopName;
++        File uploadDirectory = new File(uploadDir);
++        if (!uploadDirectory.exists()) {
++            uploadDirectory.mkdirs();
++        }
++        File dest = new File(uploadDirectory, fileName);
++        System.out.println("保存的绝对路径为:" + dest);
++        try {
++            file.transferTo(dest);
++            return fileName;
++        } catch (IllegalStateException e) {
++            e.printStackTrace();
++            return "false";
++        } catch (IOException e) {
++            e.printStackTrace();
++            return "false";
++        }
++    }
++}
+diff --git a/SpringbootSchoolShop/src/main/resources/application.yml b/SpringbootSchoolShop/src/main/resources/application.yml
+index d7d1769..4658828 100644
+--- a/SpringbootSchoolShop/src/main/resources/application.yml
++++ b/SpringbootSchoolShop/src/main/resources/application.yml
+@@ -1,63 +1,57 @@
+-server:
+-  port: 8081
+-  servlet:
+-    context-path: /shop
+-    multipart:
+-      max-file-size: 10MB  #单个文件
+-      max-request-size: 100MB #总文件大小
+-
+-spring:
+-     datasource:
+-        driver-class-name: com.mysql.cj.jdbc.Driver
+-        url: jdbc:mysql://127.0.0.1:3306/db_shopmaster?serverTimezone=GMT%2B8&useUnicode=true&characterEncoding=utf8
+-        username: root
+-        password: 123456
+-     jpa:
+-       show-sql: true
+-     mvc:
+-       view:
+-         prefix: /WEB-INF/views/
+-         suffix: .jsp
+-
+-
+-mybatis:
+-  mapper-locations: classpath:mapper/*.xml
+-  type-aliases-package: com.zhang.ssmschoolshop.entity
+-   #devtools插件
+-devtools:
+-    restart:
+-      enabled: true #是否支持热部署
+-#mybaatis分页插件pagehelper设置
+-pagehelper:
+-  pagehelperDialect: mysql
+-  reasonable: true
+-  support-methods-arguments: true
+-
+-  # 打印sql
+-logging:
+-    level:
+-       com.zhang.ssmschoolshop.dao: DEBUG
+-
+-
+-mail:
+-  host: smtp.qq.com
+-  username: 1452212104@qq.com
+-  password: ngwtfshywjpajihi1  ### 你的邮件smtp授权码
+-  default-encoding: UTF-8
+-  protocol: smtp
+-  properties:
+-    mail:
+-      smtp:
+-        ssl:
+-          enable: true
+-  #spring.mail.port: 25
+-  from: 1452212105@qq.com
+-  receive:  1452212101@qq.com #收件者邮箱
+-  receive2: 1452212102@qq.com
+-  test-connection: false
+-
+-
+-
+-
+-
+-
++server:
++  port: 8081
++  servlet:
++    context-path: /shop
++    multipart:
++      max-file-size: 10MB
++      max-request-size: 100MB
++
++spring:
++  datasource:
++    driver-class-name: com.mysql.cj.jdbc.Driver
++    url: jdbc:mysql://127.0.0.1:3306/db_shopmaster?serverTimezone=GMT%2B8&useUnicode=true&characterEncoding=utf8
++    username: root
++    password: 123456
++  jpa:
++    show-sql: true
++  mvc:
++    view:
++      prefix: /WEB-INF/views/
++      suffix: .jsp
++
++mybatis:
++  mapper-locations: classpath:mapper/*.xml
++  type-aliases-package: com.zhang.ssmschoolshop.entity
++
++devtools:
++  restart:
++    enabled: true
++
++pagehelper:
++  pagehelperDialect: mysql
++  reasonable: true
++  support-methods-arguments: true
++
++logging:
++  level:
++    com.zhang.ssmschoolshop.dao: DEBUG
++
++mail:
++  host: smtp.qq.com
++  username: 1452212104@qq.com
++  password: ngwtfshywjpajihi1
++  default-encoding: UTF-8
++  protocol: smtp
++  properties:
++    mail:
++      smtp:
++        ssl:
++          enable: true
++  from: 1452212105@qq.com
++  receive: 1452212101@qq.com
++  receive2: 1452212102@qq.com
++  test-connection: false
++
++shop:
++  image:
++    upload-dir: D:/upload
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class
+deleted file mode 100644
+index 0f1a8e3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class
+deleted file mode 100644
+index 5dbfa9f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class
+deleted file mode 100644
+index 9e731b8..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class
+deleted file mode 100644
+index 9dcc75f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class
+deleted file mode 100644
+index 2189da8..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class
+deleted file mode 100644
+index 53b391a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class
+deleted file mode 100644
+index 869528f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class
+deleted file mode 100644
+index 5f1cec5..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class
+deleted file mode 100644
+index 108377a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class
+deleted file mode 100644
+index 6b069d8..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class
+deleted file mode 100644
+index de158b6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class
+deleted file mode 100644
+index 51a0d1c..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class
+deleted file mode 100644
+index e8f1c33..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class
+deleted file mode 100644
+index ee34fdf..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class
+deleted file mode 100644
+index 2da6c40..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class
+deleted file mode 100644
+index 1140eb6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class
+deleted file mode 100644
+index c82cfef..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class
+deleted file mode 100644
+index 8defaf5..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class
+deleted file mode 100644
+index 470c30b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class
+deleted file mode 100644
+index 89ccaed..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class
+deleted file mode 100644
+index 7105d53..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class
+deleted file mode 100644
+index 916673e..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class
+deleted file mode 100644
+index 3e2c287..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class
+deleted file mode 100644
+index f80684a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class
+deleted file mode 100644
+index 8a2c8d2..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class
+deleted file mode 100644
+index f1f11a3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class
+deleted file mode 100644
+index 5e99e07..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class
+deleted file mode 100644
+index fde8653..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class
+deleted file mode 100644
+index 094c9db..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class
+deleted file mode 100644
+index ce29e1d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class
+deleted file mode 100644
+index daf19f6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class
+deleted file mode 100644
+index fc17fc1..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class
+deleted file mode 100644
+index 8b019fc..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class
+deleted file mode 100644
+index beb272c..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class
+deleted file mode 100644
+index a1d41ab..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class
+deleted file mode 100644
+index 4c2703f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class
+deleted file mode 100644
+index 18fc9af..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class
+deleted file mode 100644
+index 7ad99af..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class
+deleted file mode 100644
+index 5ee167c..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class
+deleted file mode 100644
+index 4767966..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class
+deleted file mode 100644
+index 186df3d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class
+deleted file mode 100644
+index 53f3fe3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class
+deleted file mode 100644
+index 972d730..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class
+deleted file mode 100644
+index 45a9f09..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class
+deleted file mode 100644
+index a5c451d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class
+deleted file mode 100644
+index efc1869..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class
+deleted file mode 100644
+index 4b39a5d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class
+deleted file mode 100644
+index ed3defa..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class
+deleted file mode 100644
+index e7a552a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class
+deleted file mode 100644
+index 410658b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class
+deleted file mode 100644
+index d0c3c75..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class
+deleted file mode 100644
+index 827dcd4..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class
+deleted file mode 100644
+index 1333203..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class
+deleted file mode 100644
+index 4e82be6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class
+deleted file mode 100644
+index b94846a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class
+deleted file mode 100644
+index e534198..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class
+deleted file mode 100644
+index ea72302..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class
+deleted file mode 100644
+index 1d0c757..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class
+deleted file mode 100644
+index e570726..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class
+deleted file mode 100644
+index 3640bad..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class
+deleted file mode 100644
+index ea30ee9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class
+deleted file mode 100644
+index f3b667e..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class
+deleted file mode 100644
+index b0b1ce4..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class
+deleted file mode 100644
+index fee0495..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class
+deleted file mode 100644
+index 5ef284b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class
+deleted file mode 100644
+index ebe39b6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class
+deleted file mode 100644
+index 4a66c80..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class
+deleted file mode 100644
+index 8cb749b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class
+deleted file mode 100644
+index f89d4eb..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class
+deleted file mode 100644
+index 6476174..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class
+deleted file mode 100644
+index f5625c7..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class
+deleted file mode 100644
+index 42f29a7..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class
+deleted file mode 100644
+index be99644..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class
+deleted file mode 100644
+index 6a35b8f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class
+deleted file mode 100644
+index 61c61f3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class
+deleted file mode 100644
+index 0c865b7..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class
+deleted file mode 100644
+index c817f99..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class
+deleted file mode 100644
+index aa93c3b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class
+deleted file mode 100644
+index 9021098..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class
+deleted file mode 100644
+index 929876b..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class
+deleted file mode 100644
+index 0819ee6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class
+deleted file mode 100644
+index adda0eb..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class
+deleted file mode 100644
+index 47bdeaf..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class
+deleted file mode 100644
+index b3ce863..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class
+deleted file mode 100644
+index 2d4a757..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class
+deleted file mode 100644
+index 96afed3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class
+deleted file mode 100644
+index 962e979..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class
+deleted file mode 100644
+index 87388fa..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class
+deleted file mode 100644
+index d0f1c1d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class
+deleted file mode 100644
+index cd0af37..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class
+deleted file mode 100644
+index 283cc5a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class
+deleted file mode 100644
+index 1ba2839..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class
+deleted file mode 100644
+index bea7132..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class
+deleted file mode 100644
+index 5e79370..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class
+deleted file mode 100644
+index 8ade014..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class
+deleted file mode 100644
+index 7cec421..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class
+deleted file mode 100644
+index 4666bcd..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class
+deleted file mode 100644
+index f5173d5..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class
+deleted file mode 100644
+index db56fe2..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class
+deleted file mode 100644
+index afaa2d9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class
+deleted file mode 100644
+index 11aa5c5..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class
+deleted file mode 100644
+index 1150711..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class
+deleted file mode 100644
+index 0451f80..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class
+deleted file mode 100644
+index 0c8ffce..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class
+deleted file mode 100644
+index b603259..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class
+deleted file mode 100644
+index 37dd2e9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class
+deleted file mode 100644
+index 703ff83..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class
+deleted file mode 100644
+index 77b7db1..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class
+deleted file mode 100644
+index 1aa3960..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class
+deleted file mode 100644
+index 59f2aaa..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class
+deleted file mode 100644
+index ec1d431..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class
+deleted file mode 100644
+index af432c3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class
+deleted file mode 100644
+index 1fab0e3..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class
+deleted file mode 100644
+index 2056c7d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class
+deleted file mode 100644
+index b9be276..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class
+deleted file mode 100644
+index a0119a9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class
+deleted file mode 100644
+index f0f3111..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class
+deleted file mode 100644
+index c4d6186..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class
+deleted file mode 100644
+index 1c06d7d..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class
+deleted file mode 100644
+index fcefe3f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class
+deleted file mode 100644
+index 28d7f13..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class
+deleted file mode 100644
+index 843056c..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class
+deleted file mode 100644
+index c892d80..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class and /dev/null differ
+diff --git a/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class b/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class
+deleted file mode 100644
+index beb8477..0000000
+Binary files a/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class and /dev/null differ
