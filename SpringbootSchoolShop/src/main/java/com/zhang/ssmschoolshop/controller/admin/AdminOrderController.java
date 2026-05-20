@@ -7,7 +7,10 @@ import com.zhang.ssmschoolshop.entity.*;
 import com.zhang.ssmschoolshop.service.EmailService;
 import com.zhang.ssmschoolshop.service.GoodsService;
 import com.zhang.ssmschoolshop.service.OrderService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +24,8 @@ import java.util.List;
 @RequestMapping("/admin/order")
 public class AdminOrderController {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminOrderController.class);
+
     @Autowired
     private OrderService orderService;
 
@@ -30,6 +35,9 @@ public class AdminOrderController {
 
     @Autowired
     private EmailService emailService;
+
+    @Value("${mail.enabled:false}")
+    private Boolean mailEnabled;
 
     @RequestMapping("/send")
     public String sendOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
@@ -96,7 +104,11 @@ public class AdminOrderController {
         order.setIssend(true);
         orderService.updateOrderByKey(order);
         // 发送信息给用户 管理员已经发货了
-        // emailService.sendEmailToUser();
+        if (mailEnabled) {
+            emailService.sendEmailToUser();
+        } else {
+            log.info("邮件发送功能未启用，跳过发送发货通知邮件给用户");
+        }
         return "redirect:/admin/order/send";
     }
 

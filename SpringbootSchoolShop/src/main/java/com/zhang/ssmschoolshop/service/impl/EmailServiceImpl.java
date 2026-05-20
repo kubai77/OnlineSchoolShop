@@ -28,14 +28,14 @@ public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
 
-    @Value("${mail.username}")
-    private String sender;
+    @Value("${mail.from-address}")
+    private String fromAddress;
 
-    @Value("${mail.receive}")
-    private String receiver;
+    @Value("${mail.admin-address}")
+    private String adminAddress;
 
-    @Value("${mail.receive2}")
-    private String twoDog;
+    @Value("${mail.user-address}")
+    private String userAddress;
 
     @Autowired
     MailSender mailSender;
@@ -52,48 +52,37 @@ public class EmailServiceImpl implements EmailService {
         EmailSend emailSend = new EmailSend();
         emailSend.setSubject("用户购买信息");
         emailSend.setContent("today is " + LocalDate.now() + ",有新用户购买");
-//        emailSend.setReceivers();
-        log.info("开始发送邮件了");
+        log.info("开始发送邮件给管理员");
         SimpleMailMessage message = new SimpleMailMessage();
-        //谁发的
-        message.setFrom(sender);
-        //谁要接收
-        message.setTo(receiver);
-        //邮件标题
+        message.setFrom(fromAddress);
+        message.setTo(adminAddress);
         message.setSubject(emailSend.getSubject());
-        //邮件内容
         message.setText(emailSend.getContent());
         try {
             mailSender.send(message);
+            log.info("发送邮件给管理员成功");
         } catch (MailException e) {
-            e.printStackTrace();
+            log.error("发送邮件给管理员失败", e);
         }
 
     }
 
     @Override
     public void sendEmailToUser() {
-
         EmailSend emailSend = new EmailSend();
         emailSend.setSubject("管理员已经发货");
         emailSend.setContent("today is " + LocalDate.now() + ",商城已经发货");
-//        emailSend.setReceivers();
-        log.info("开始发送邮件了");
+        log.info("开始发送邮件给用户");
         SimpleMailMessage message = new SimpleMailMessage();
-        //谁发的
-        message.setFrom(receiver);
-        //谁要接收
-        message.setTo(sender);
-        //邮件标题
+        message.setFrom(fromAddress);
+        message.setTo(userAddress);
         message.setSubject(emailSend.getSubject());
-        //邮件内容
         message.setText(emailSend.getContent());
         try {
             mailSender.send(message);
+            log.info("发送邮件给用户成功");
         } catch (MailException e) {
-            e.printStackTrace();
+            log.error("发送邮件给用户失败", e);
         }
-
-
     }
 }

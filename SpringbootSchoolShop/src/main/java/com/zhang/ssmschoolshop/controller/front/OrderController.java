@@ -7,15 +7,13 @@ import com.zhang.ssmschoolshop.util.Msg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.servlet.http.HttpSession;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -44,6 +42,9 @@ public class OrderController {
 
     @Autowired
     private EmailService emailService;
+
+    @Value("${mail.enabled:false}")
+    private Boolean mailEnabled;
 
     @RequestMapping("/order")
     public String showOrder(HttpSession session, Model model) {
@@ -146,7 +147,11 @@ public class OrderController {
             orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
         }
         // 购买成功通知管理员
-       // emailService.sendEmailToAdmin();
+        if (mailEnabled) {
+            emailService.sendEmailToAdmin();
+        } else {
+            log.info("邮件发送功能未启用，跳过发送订单通知邮件给管理员");
+        }
         return Msg.success("购买成功");
     }
 

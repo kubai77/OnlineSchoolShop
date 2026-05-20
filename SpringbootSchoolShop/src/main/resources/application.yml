@@ -18,6 +18,19 @@ spring:
        view:
          prefix: /WEB-INF/views/
          suffix: .jsp
+     mail:
+       host: smtp.qq.com
+       username: 1452212104@qq.com
+       password: ngwtfshywjpajihi1  # 你的邮件smtp授权码
+       default-encoding: UTF-8
+       protocol: smtp
+       properties:
+         mail:
+           smtp:
+             ssl:
+               enable: true
+       port: 465
+       test-connection: false
 
 
 mybatis:
@@ -40,21 +53,10 @@ logging:
 
 
 mail:
-  host: smtp.qq.com
-  username: 1452212104@qq.com
-  password: ngwtfshywjpajihi1  ### 你的邮件smtp授权码
-  default-encoding: UTF-8
-  protocol: smtp
-  properties:
-    mail:
-      smtp:
-        ssl:
-          enable: true
-  #spring.mail.port: 25
-  from: 1452212105@qq.com
-  receive:  1452212101@qq.com #收件者邮箱
-  receive2: 1452212102@qq.com
-  test-connection: false
+  enabled: false  # 邮件发送功能开关，设置为true启用
+  from-address: 1452212104@qq.com  # 发件人邮箱
+  admin-address: 1452212101@qq.com  # 管理员邮箱（接收订单通知）
+  user-address: 1452212105@qq.com  # 用户邮箱（接收发货通知）
 
 
 

@@ -1,0 +1,261 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
+index b7cb8d1..107c065 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
+@@ -5,10 +5,6 @@ import org.springframework.boot.SpringApplication;
+ import org.springframework.boot.autoconfigure.SpringBootApplication;
+ import org.springframework.boot.builder.SpringApplicationBuilder;
+ import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
+-import org.springframework.context.annotation.Bean;
+-import org.springframework.mail.MailException;
+-import org.springframework.mail.MailSender;
+-import org.springframework.mail.SimpleMailMessage;
+ import springfox.documentation.swagger2.annotations.EnableSwagger2;
+ 
+ @SpringBootApplication
+@@ -25,20 +21,4 @@ public class SpringbootSchoolShopApplication extends SpringBootServletInitialize
+         SpringApplication.run(SpringbootSchoolShopApplication.class, args);
+     }
+ 
+-
+-    @Bean
+-    public MailSender mailSender(){
+-        return new MailSender() {
+-            @Override
+-            public void send(SimpleMailMessage simpleMailMessage) throws MailException {
+-
+-            }
+-
+-            @Override
+-            public void send(SimpleMailMessage... simpleMailMessages) throws MailException {
+-
+-            }
+-        };
+-    }
+-
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
+index 11f44d3..3606621 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.java
+@@ -7,7 +7,10 @@ import com.zhang.ssmschoolshop.entity.*;
+ import com.zhang.ssmschoolshop.service.EmailService;
+ import com.zhang.ssmschoolshop.service.GoodsService;
+ import com.zhang.ssmschoolshop.service.OrderService;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.beans.factory.annotation.Value;
+ import org.springframework.stereotype.Controller;
+ import org.springframework.ui.Model;
+ import org.springframework.web.bind.annotation.RequestMapping;
+@@ -21,6 +24,8 @@ import java.util.List;
+ @RequestMapping("/admin/order")
+ public class AdminOrderController {
+ 
++    private static final Logger log = LoggerFactory.getLogger(AdminOrderController.class);
++
+     @Autowired
+     private OrderService orderService;
+ 
+@@ -31,6 +36,9 @@ public class AdminOrderController {
+     @Autowired
+     private EmailService emailService;
+ 
++    @Value("${mail.enabled:false}")
++    private Boolean mailEnabled;
++
+     @RequestMapping("/send")
+     public String sendOrder(@RequestParam(value = "page",defaultValue = "1")Integer pn, Model model, HttpSession session) {
+ 
+@@ -96,7 +104,11 @@ public class AdminOrderController {
+         order.setIssend(true);
+         orderService.updateOrderByKey(order);
+         // 发送信息给用户 管理员已经发货了
+-        // emailService.sendEmailToUser();
++        if (mailEnabled) {
++            emailService.sendEmailToUser();
++        } else {
++            log.info("邮件发送功能未启用，跳过发送发货通知邮件给用户");
++        }
+         return "redirect:/admin/order/send";
+     }
+ 
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..0c7e019 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -7,15 +7,13 @@ import com.zhang.ssmschoolshop.util.Msg;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.mail.MailException;
+-import org.springframework.mail.SimpleMailMessage;
++import org.springframework.beans.factory.annotation.Value;
+ import org.springframework.stereotype.Controller;
+ import org.springframework.ui.Model;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.ResponseBody;
+ 
+ import javax.servlet.http.HttpSession;
+-import java.time.LocalDate;
+ import java.util.ArrayList;
+ import java.util.Date;
+ import java.util.List;
+@@ -45,6 +43,9 @@ public class OrderController {
+     @Autowired
+     private EmailService emailService;
+ 
++    @Value("${mail.enabled:false}")
++    private Boolean mailEnabled;
++
+     @RequestMapping("/order")
+     public String showOrder(HttpSession session, Model model) {
+ 
+@@ -146,7 +147,11 @@ public class OrderController {
+             orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
+         }
+         // 购买成功通知管理员
+-       // emailService.sendEmailToAdmin();
++        if (mailEnabled) {
++            emailService.sendEmailToAdmin();
++        } else {
++            log.info("邮件发送功能未启用，跳过发送订单通知邮件给管理员");
++        }
+         return Msg.success("购买成功");
+     }
+ 
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/EmailServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/EmailServiceImpl.java
+index 8c96f52..62927d3 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/EmailServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/EmailServiceImpl.java
+@@ -28,14 +28,14 @@ public class EmailServiceImpl implements EmailService {
+ 
+     private static final Logger log = LoggerFactory.getLogger(EmailServiceImpl.class);
+ 
+-    @Value("${mail.username}")
+-    private String sender;
++    @Value("${mail.from-address}")
++    private String fromAddress;
+ 
+-    @Value("${mail.receive}")
+-    private String receiver;
++    @Value("${mail.admin-address}")
++    private String adminAddress;
+ 
+-    @Value("${mail.receive2}")
+-    private String twoDog;
++    @Value("${mail.user-address}")
++    private String userAddress;
+ 
+     @Autowired
+     MailSender mailSender;
+@@ -52,48 +52,37 @@ public class EmailServiceImpl implements EmailService {
+         EmailSend emailSend = new EmailSend();
+         emailSend.setSubject("用户购买信息");
+         emailSend.setContent("today is " + LocalDate.now() + ",有新用户购买");
+-//        emailSend.setReceivers();
+-        log.info("开始发送邮件了");
++        log.info("开始发送邮件给管理员");
+         SimpleMailMessage message = new SimpleMailMessage();
+-        //谁发的
+-        message.setFrom(sender);
+-        //谁要接收
+-        message.setTo(receiver);
+-        //邮件标题
++        message.setFrom(fromAddress);
++        message.setTo(adminAddress);
+         message.setSubject(emailSend.getSubject());
+-        //邮件内容
+         message.setText(emailSend.getContent());
+         try {
+             mailSender.send(message);
++            log.info("发送邮件给管理员成功");
+         } catch (MailException e) {
+-            e.printStackTrace();
++            log.error("发送邮件给管理员失败", e);
+         }
+ 
+     }
+ 
+     @Override
+     public void sendEmailToUser() {
+-
+         EmailSend emailSend = new EmailSend();
+         emailSend.setSubject("管理员已经发货");
+         emailSend.setContent("today is " + LocalDate.now() + ",商城已经发货");
+-//        emailSend.setReceivers();
+-        log.info("开始发送邮件了");
++        log.info("开始发送邮件给用户");
+         SimpleMailMessage message = new SimpleMailMessage();
+-        //谁发的
+-        message.setFrom(receiver);
+-        //谁要接收
+-        message.setTo(sender);
+-        //邮件标题
++        message.setFrom(fromAddress);
++        message.setTo(userAddress);
+         message.setSubject(emailSend.getSubject());
+-        //邮件内容
+         message.setText(emailSend.getContent());
+         try {
+             mailSender.send(message);
++            log.info("发送邮件给用户成功");
+         } catch (MailException e) {
+-            e.printStackTrace();
++            log.error("发送邮件给用户失败", e);
+         }
+-
+-
+     }
+ }
+diff --git a/SpringbootSchoolShop/src/main/resources/application.yml b/SpringbootSchoolShop/src/main/resources/application.yml
+index d7d1769..3cf0fb5 100644
+--- a/SpringbootSchoolShop/src/main/resources/application.yml
++++ b/SpringbootSchoolShop/src/main/resources/application.yml
+@@ -18,6 +18,19 @@ spring:
+        view:
+          prefix: /WEB-INF/views/
+          suffix: .jsp
++     mail:
++       host: smtp.qq.com
++       username: 1452212104@qq.com
++       password: ngwtfshywjpajihi1  # 你的邮件smtp授权码
++       default-encoding: UTF-8
++       protocol: smtp
++       properties:
++         mail:
++           smtp:
++             ssl:
++               enable: true
++       port: 465
++       test-connection: false
+ 
+ 
+ mybatis:
+@@ -40,21 +53,10 @@ logging:
+ 
+ 
+ mail:
+-  host: smtp.qq.com
+-  username: 1452212104@qq.com
+-  password: ngwtfshywjpajihi1  ### 你的邮件smtp授权码
+-  default-encoding: UTF-8
+-  protocol: smtp
+-  properties:
+-    mail:
+-      smtp:
+-        ssl:
+-          enable: true
+-  #spring.mail.port: 25
+-  from: 1452212105@qq.com
+-  receive:  1452212101@qq.com #收件者邮箱
+-  receive2: 1452212102@qq.com
+-  test-connection: false
++  enabled: false  # 邮件发送功能开关，设置为true启用
++  from-address: 1452212104@qq.com  # 发件人邮箱
++  admin-address: 1452212101@qq.com  # 管理员邮箱（接收订单通知）
++  user-address: 1452212105@qq.com  # 用户邮箱（接收发货通知）
+ 
+ 
+ 
