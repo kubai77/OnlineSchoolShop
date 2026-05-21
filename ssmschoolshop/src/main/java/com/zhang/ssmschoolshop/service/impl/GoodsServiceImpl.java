@@ -9,7 +9,7 @@ import com.zhang.ssmschoolshop.service.GoodsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 @Service("goodsService")
 public class GoodsServiceImpl implements GoodsService {
@@ -59,6 +59,34 @@ public class GoodsServiceImpl implements GoodsService {
     }
 
     @Override
+    public Map<Integer, List<ImagePath>> findImagePathByGoodsIds(List<Integer> goodsIds) {
+        if (goodsIds == null || goodsIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        ImagePathExample example = new ImagePathExample();
+        example.or().andGoodidIn(goodsIds);
+        List<ImagePath> allImages = imagePathMapper.selectByExample(example);
+
+        Map<Integer, List<ImagePath>> result = new HashMap<Integer, List<ImagePath>>();
+        for (ImagePath img : allImages) {
+            Integer gid = img.getGoodid();
+            List<ImagePath> list = result.get(gid);
+            if (list == null) {
+                list = new ArrayList<ImagePath>();
+                result.put(gid, list);
+            }
+            list.add(img);
+        }
+        // 确保每个 goodsId 都有 entry（即使没有图片也返回空列表）
+        for (Integer gid : goodsIds) {
+            if (!result.containsKey(gid)) {
+                result.put(gid, Collections.<ImagePath>emptyList());
+            }
+        }
+        return result;
+    }
+
+    @Override
     public Goods selectById(Integer goodsid) {
         return goodsMapper.selectByPrimaryKey(goodsid);
     }
@@ -76,6 +104,22 @@ public class GoodsServiceImpl implements GoodsService {
     @Override
     public Favorite selectFavByKey(FavoriteKey favoriteKey) {
         return favoriteMapper.selectByPrimaryKey(favoriteKey);
+    }
+
+    @Override
+    public Set<Integer> selectFavGoodsIdsByUserAndGoodsIds(Integer userId, List<Integer> goodsIds) {
+        if (userId == null || goodsIds == null || goodsIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        FavoriteExample example = new FavoriteExample();
+        example.or().andUseridEqualTo(userId).andGoodsidIn(goodsIds);
+        List<Favorite> favList = favoriteMapper.selectByExample(example);
+
+        Set<Integer> favGoodsIds = new HashSet<>();
+        for (Favorite fav : favList) {
+            favGoodsIds.add(fav.getGoodsid());
+        }
+        return favGoodsIds;
     }
 
     @Override

@@ -10,8 +10,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.servlet.http.HttpSession;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Controller
 public class MainController {
@@ -104,23 +103,26 @@ public class MainController {
 
         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
 
-        List<Goods> goodsAndImage = new ArrayList<>();
-        //获取每个商品的图片
-        for (Goods goods:goodsList) {
-            //判断是否为登录状态
-            if (userid == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
+        if (goodsList == null || goodsList.isEmpty()) {
+            return new ArrayList<>();
+        }
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-            goods.setImagePaths(imagePathList);
+        // 收集所有 goodsId，批量查询图片
+        List<Integer> goodsIds = new ArrayList<Integer>();
+        for (Goods goods : goodsList) {
+            goodsIds.add(goods.getGoodsid());
+        }
+        Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
+
+        // 批量查询收藏态
+        Set<Integer> favGoodsIds = goodsService.selectFavGoodsIdsByUserAndGoodsIds(userid, goodsIds);
+
+        // 组装结果
+        List<Goods> goodsAndImage = new ArrayList<Goods>();
+        for (Goods goods : goodsList) {
+            List<ImagePath> paths = imageMap.get(goods.getGoodsid());
+            goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
+            goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
             goodsAndImage.add(goods);
         }
         return goodsAndImage;

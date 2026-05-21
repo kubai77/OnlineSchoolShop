@@ -8,7 +8,7 @@ import com.zhang.ssmschoolshop.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 @Service("userService")
 public class UserServiceImpl implements UserService {
@@ -24,6 +24,22 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<User> selectByExample(UserExample userExample) {
         return userMapper.selectByExample(userExample);
+    }
+
+    @Override
+    public Map<Integer, User> selectByPrimaryKeys(List<Integer> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        UserExample example = new UserExample();
+        example.or().andUseridIn(userIds);
+        List<User> users = userMapper.selectByExample(example);
+
+        Map<Integer, User> result = new HashMap<Integer, User>();
+        for (User user : users) {
+            result.put(user.getUserid(), user);
+        }
+        return result;
     }
 
     @Override

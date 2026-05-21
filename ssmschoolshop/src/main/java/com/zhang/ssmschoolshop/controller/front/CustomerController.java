@@ -18,9 +18,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @Controller
 public class CustomerController {
@@ -258,18 +256,19 @@ public class CustomerController {
             goodsList = goodsService.selectByExample(goodsExample);
         }
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        // 批量查询图片
+        if (!goodsList.isEmpty()) {
+            List<Integer> goodsIds = new ArrayList<Integer>();
+            for (Goods g : goodsList) {
+                goodsIds.add(g.getGoodsid());
+            }
+            Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            goods.setFav(true);
-
-            goodsList.set(i, goods);
+            for (Goods goods : goodsList) {
+                List<ImagePath> paths = imageMap.get(goods.getGoodsid());
+                goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
+                goods.setFav(true);
+            }
         }
 
         //显示几个页号

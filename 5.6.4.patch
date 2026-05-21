@@ -1,0 +1,765 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index e38ef88..734ec4b 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -18,9 +18,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpSession;
+-import java.util.ArrayList;
+-import java.util.Date;
+-import java.util.List;
++import java.util.*;
+ 
+ @Controller
+ public class CustomerController {
+@@ -258,18 +256,19 @@ public class CustomerController {
+             goodsList = goodsService.selectByExample(goodsExample);
+         }
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            goods.setFav(true);
+-
+-            goodsList.set(i, goods);
++        // 批量查询图片
++        if (!goodsList.isEmpty()) {
++            List<Integer> goodsIds = new ArrayList<Integer>();
++            for (Goods g : goodsList) {
++                goodsIds.add(g.getGoodsid());
++            }
++            Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
++
++            for (Goods goods : goodsList) {
++                List<ImagePath> paths = imageMap.get(goods.getGoodsid());
++                goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
++                goods.setFav(true);
++            }
+         }
+ 
+         //显示几个页号
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+index eb07ecf..6bd1cdd 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+@@ -85,12 +85,22 @@ public class FrontGoodsController {
+         CommentExample commentExample=new CommentExample();
+         commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
+         List<Comment> commentList=commentService.selectByExample(commentExample);
+-        for (Integer i=0;i<commentList.size();i++)
+-        {
+-            Comment comment=commentList.get(i);
+-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
+-            comment.setUserName(commentUser.getUsername());
+-            commentList.set(i,comment);
++
++        // 批量查询评论用户，避免 N+1
++        if (!commentList.isEmpty()) {
++            List<Integer> userIds = new ArrayList<Integer>();
++            for (Comment c : commentList) {
++                if (!userIds.contains(c.getUserid())) {
++                    userIds.add(c.getUserid());
++                }
++            }
++            Map<Integer, User> userMap = userService.selectByPrimaryKeys(userIds);
++            for (Comment comment : commentList) {
++                User commentUser = userMap.get(comment.getUserid());
++                if (commentUser != null) {
++                    comment.setUserName(commentUser.getUsername());
++                }
++            }
+         }
+         model.addAttribute("commentList",commentList);
+ 
+@@ -109,30 +119,25 @@ public class FrontGoodsController {
+         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
++        if (goodsList != null && !goodsList.isEmpty()) {
++            // 批量查询图片
++            List<Integer> goodsIds = new ArrayList<Integer>();
++            for (Goods g : goodsList) {
++                goodsIds.add(g.getGoodsid());
++            }
++            Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
+ 
+-            goods.setImagePaths(imagePathList);
++            // 批量查询收藏态
++            Integer userid = (user == null) ? null : user.getUserid();
++            Set<Integer> favGoodsIds = goodsService.selectFavGoodsIdsByUserAndGoodsIds(userid, goodsIds);
+ 
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
++            for (Goods goods : goodsList) {
++                List<ImagePath> paths = imageMap.get(goods.getGoodsid());
++                goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
++                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+             }
+-
+-            goodsList.set(i, goods);
+         }
+ 
+-
+         //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+         model.addAttribute("pageInfo", page);
+@@ -201,27 +206,23 @@ public class FrontGoodsController {
+         }
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
++        if (goodsList != null && !goodsList.isEmpty()) {
++            // 批量查询图片
++            List<Integer> goodsIds = new ArrayList<Integer>();
++            for (Goods g : goodsList) {
++                goodsIds.add(g.getGoodsid());
++            }
++            Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
+ 
+-            goods.setImagePaths(imagePathList);
++            // 批量查询收藏态
++            Integer userid = (user == null) ? null : user.getUserid();
++            Set<Integer> favGoodsIds = goodsService.selectFavGoodsIdsByUserAndGoodsIds(userid, goodsIds);
+ 
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
++            for (Goods goods : goodsList) {
++                List<ImagePath> paths = imageMap.get(goods.getGoodsid());
++                goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
++                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+             }
+-
+-            goodsList.set(i, goods);
+         }
+ 
+ 
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+index fbb198d..4bf0093 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+@@ -10,8 +10,7 @@ import org.springframework.ui.Model;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ 
+ import javax.servlet.http.HttpSession;
+-import java.util.ArrayList;
+-import java.util.List;
++import java.util.*;
+ 
+ @Controller
+ public class MainController {
+@@ -104,23 +103,26 @@ public class MainController {
+ 
+         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
+ 
+-        List<Goods> goodsAndImage = new ArrayList<>();
+-        //获取每个商品的图片
+-        for (Goods goods:goodsList) {
+-            //判断是否为登录状态
+-            if (userid == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-            goods.setImagePaths(imagePathList);
++        if (goodsList == null || goodsList.isEmpty()) {
++            return new ArrayList<>();
++        }
++
++        // 收集所有 goodsId，批量查询图片
++        List<Integer> goodsIds = new ArrayList<Integer>();
++        for (Goods goods : goodsList) {
++            goodsIds.add(goods.getGoodsid());
++        }
++        Map<Integer, List<ImagePath>> imageMap = goodsService.findImagePathByGoodsIds(goodsIds);
++
++        // 批量查询收藏态
++        Set<Integer> favGoodsIds = goodsService.selectFavGoodsIdsByUserAndGoodsIds(userid, goodsIds);
++
++        // 组装结果
++        List<Goods> goodsAndImage = new ArrayList<Goods>();
++        for (Goods goods : goodsList) {
++            List<ImagePath> paths = imageMap.get(goods.getGoodsid());
++            goods.setImagePaths(paths != null ? paths : Collections.<ImagePath>emptyList());
++            goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+             goodsAndImage.add(goods);
+         }
+         return goodsAndImage;
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..e11afaf 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -4,6 +4,8 @@ package com.zhang.ssmschoolshop.service;
+ import com.zhang.ssmschoolshop.entity.*;
+ 
+ import java.util.List;
++import java.util.Map;
++import java.util.Set;
+ 
+ public interface GoodsService {
+     public Integer addGoods(Goods goods);
+@@ -18,6 +20,11 @@ public interface GoodsService {
+ 
+     public List<ImagePath> findImagePath(Integer goodsid);
+ 
++    /**
++     * 批量查询多个商品的图片，返回 goodsId -> List<ImagePath> 映射
++     */
++    public Map<Integer, List<ImagePath>> findImagePathByGoodsIds(List<Integer> goodsIds);
++
+     public Goods selectById(Integer goodsid);
+ 
+     public List<Goods> selectByExampleLimit(GoodsExample digGoodsExample);
+@@ -26,6 +33,11 @@ public interface GoodsService {
+ 
+     public Favorite selectFavByKey(FavoriteKey favoriteKey);
+ 
++    /**
++     * 批量查询某用户对一批商品的收藏态，返回已收藏的 goodsId 集合
++     */
++    public Set<Integer> selectFavGoodsIdsByUserAndGoodsIds(Integer userId, List<Integer> goodsIds);
++
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
+index 261becd..89dd1e6 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
+@@ -5,12 +5,18 @@ import com.zhang.ssmschoolshop.entity.User;
+ import com.zhang.ssmschoolshop.entity.UserExample;
+ 
+ import java.util.List;
++import java.util.Map;
+ 
+ public interface UserService {
+     public User selectByPrimaryKey(int userId);
+     /*public User selectByPrimaryKeyAndPassword(int userId,String password);*/
+     public List<User> selectByExample(UserExample userExample);
+ 
++    /**
++     * 批量查询用户，返回 userId -> User 映射
++     */
++    public Map<Integer, User> selectByPrimaryKeys(List<Integer> userIds);
++
+     public void insertSelective(User user);
+ 
+     public void deleteUserById(Integer userid);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..fc25531 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -9,7 +9,7 @@ import com.zhang.ssmschoolshop.service.GoodsService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
+-import java.util.List;
++import java.util.*;
+ 
+ @Service("goodsService")
+ public class GoodsServiceImpl implements GoodsService {
+@@ -58,6 +58,34 @@ public class GoodsServiceImpl implements GoodsService {
+         return imagePathMapper.selectByExample(imagePathExample);
+     }
+ 
++    @Override
++    public Map<Integer, List<ImagePath>> findImagePathByGoodsIds(List<Integer> goodsIds) {
++        if (goodsIds == null || goodsIds.isEmpty()) {
++            return Collections.emptyMap();
++        }
++        ImagePathExample example = new ImagePathExample();
++        example.or().andGoodidIn(goodsIds);
++        List<ImagePath> allImages = imagePathMapper.selectByExample(example);
++
++        Map<Integer, List<ImagePath>> result = new HashMap<Integer, List<ImagePath>>();
++        for (ImagePath img : allImages) {
++            Integer gid = img.getGoodid();
++            List<ImagePath> list = result.get(gid);
++            if (list == null) {
++                list = new ArrayList<ImagePath>();
++                result.put(gid, list);
++            }
++            list.add(img);
++        }
++        // 确保每个 goodsId 都有 entry（即使没有图片也返回空列表）
++        for (Integer gid : goodsIds) {
++            if (!result.containsKey(gid)) {
++                result.put(gid, Collections.<ImagePath>emptyList());
++            }
++        }
++        return result;
++    }
++
+     @Override
+     public Goods selectById(Integer goodsid) {
+         return goodsMapper.selectByPrimaryKey(goodsid);
+@@ -78,6 +106,22 @@ public class GoodsServiceImpl implements GoodsService {
+         return favoriteMapper.selectByPrimaryKey(favoriteKey);
+     }
+ 
++    @Override
++    public Set<Integer> selectFavGoodsIdsByUserAndGoodsIds(Integer userId, List<Integer> goodsIds) {
++        if (userId == null || goodsIds == null || goodsIds.isEmpty()) {
++            return Collections.emptySet();
++        }
++        FavoriteExample example = new FavoriteExample();
++        example.or().andUseridEqualTo(userId).andGoodsidIn(goodsIds);
++        List<Favorite> favList = favoriteMapper.selectByExample(example);
++
++        Set<Integer> favGoodsIds = new HashSet<>();
++        for (Favorite fav : favList) {
++            favGoodsIds.add(fav.getGoodsid());
++        }
++        return favGoodsIds;
++    }
++
+     @Override
+     public void deleteFavByKey(FavoriteKey favoriteKey) {
+         favoriteMapper.deleteByPrimaryKey(favoriteKey);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
+index 1c824c3..696403b 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
+@@ -8,7 +8,7 @@ import com.zhang.ssmschoolshop.service.UserService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
+-import java.util.List;
++import java.util.*;
+ 
+ @Service("userService")
+ public class UserServiceImpl implements UserService {
+@@ -26,6 +26,22 @@ public class UserServiceImpl implements UserService {
+         return userMapper.selectByExample(userExample);
+     }
+ 
++    @Override
++    public Map<Integer, User> selectByPrimaryKeys(List<Integer> userIds) {
++        if (userIds == null || userIds.isEmpty()) {
++            return Collections.emptyMap();
++        }
++        UserExample example = new UserExample();
++        example.or().andUseridIn(userIds);
++        List<User> users = userMapper.selectByExample(example);
++
++        Map<Integer, User> result = new HashMap<Integer, User>();
++        for (User user : users) {
++            result.put(user.getUserid(), user);
++        }
++        return result;
++    }
++
+     @Override
+     public void insertSelective(User user) {
+         userMapper.insertSelective(user);
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class
+index 0f1a8e3..831c616 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/asd.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class
+index 5dbfa9f..06ba996 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/ActivityController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class
+index 9e731b8..67b401b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/AdminOrderController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class
+index 9dcc75f..0cfc7a5 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/GoodsController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class
+index 2189da8..b7e6be7 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/LoginController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class
+index 53b391a..a720b9d 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/admin/UserController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class
+index 869528f..bf678c3 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CartController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class
+index 5f1cec5..319e691 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/ChatController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class
+index 108377a..59d1741 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class
+index 6b069d8..a6814e6 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class
+index de158b6..956411f 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class
+index 51a0d1c..51c00b7 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class
+index e8f1c33..f297cb9 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/VerificationCodeImgController.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class
+index ee34fdf..73dced3 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ActivityMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class
+index 2da6c40..b323e1c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AddressMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class
+index 1140eb6..f31343b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/AdminMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class
+index c82cfef..003381c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CategoryMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class
+index 8defaf5..6befb67 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ChatMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class
+index 470c30b..89a3628 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/CommentMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class
+index 89ccaed..13bee69 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/DeliverMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class
+index 7105d53..18b838e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class
+index 916673e..93b24d8 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class
+index 3e2c287..c494e16 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class
+index f80684a..e797335 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderItemMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class
+index 8a2c8d2..8e5bd14 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/OrderMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class
+index f1f11a3..2491ccf 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ShopCartMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class
+index 5e99e07..7cec0ec 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class
+index fde8653..53d4876 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Activity.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class
+index 094c9db..fc9ff68 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class
+index ce29e1d..d08d04e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class
+index daf19f6..98fef8c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class
+index fc17fc1..fe68b73 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ActivityExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class
+index 8b019fc..e027a70 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Address.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class
+index beb272c..68eaaa9 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class
+index a1d41ab..3ff0eb4 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class
+index 4c2703f..c9ce66d 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class
+index 18fc9af..fd34ef9 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AddressExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class
+index 7ad99af..bd9830e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Admin.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class
+index 5ee167c..774d07c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class
+index 4767966..ce869b7 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class
+index 186df3d..f5af20e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class
+index 53f3fe3..1107f93 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/AdminExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class
+index 972d730..4b35acf 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Category.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class
+index 45a9f09..33b8fe6 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class
+index a5c451d..938873c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class
+index efc1869..d833816 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class
+index 4b39a5d..66df89b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CategoryExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class
+index ed3defa..660115a 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Chat.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class
+index e7a552a..5779293 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class
+index 410658b..02b524f 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class
+index d0c3c75..4b3f91b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class
+index 827dcd4..fec7916 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ChatExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class
+index 1333203..c13c39b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Comment.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class
+index 4e82be6..dbcddb2 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class
+index b94846a..0c99f7a 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class
+index e534198..778460c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class
+index ea72302..e532d04 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/CommentExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class
+index 1d0c757..c5a2ba2 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Deliver.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class
+index e570726..3faafb4 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class
+index 3640bad..1b5c515 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class
+index ea30ee9..18f2137 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class
+index f3b667e..61ed335 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/DeliverExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class
+index b0b1ce4..7e6df5c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Favorite.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class
+index fee0495..f5a4c5d 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class
+index 5ef284b..22bb414 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class
+index ebe39b6..a3aa102 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class
+index 4a66c80..fdd82d0 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class
+index 8cb749b..e62029b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/FavoriteKey.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class
+index f89d4eb..215bafb 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Goods.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class
+index 6476174..058bb90 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class
+index f5625c7..587b5d0 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class
+index 42f29a7..a1519a4 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class
+index be99644..242a0e9 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class
+index 6a35b8f..8c72fdb 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/GoodsPrice.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class
+index 61c61f3..271b29f 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePath.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class
+index 0c865b7..7941fad 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class
+index c817f99..ccc1c7e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class
+index aa93c3b..3d77162 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class
+index 9021098..4a36f31 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ImagePathExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class
+index 929876b..6e8b970 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/Order.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class
+index 0819ee6..bd9f3e4 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class
+index adda0eb..0d010ee 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class
+index 47bdeaf..baca230 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class
+index b3ce863..29381c7 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class
+index 2d4a757..dc10699 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItem.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class
+index 96afed3..3a52643 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class
+index 962e979..6e5e389 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class
+index 87388fa..ef66b8a 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class
+index d0f1c1d..a1e21d6 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/OrderItemExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class
+index cd0af37..327e9e2 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCart.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class
+index 283cc5a..293eb3a 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class
+index 1ba2839..c149690 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class
+index bea7132..45544dd 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class
+index 5e79370..a2f60fd 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class
+index 8ade014..895e7ed 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/ShopCartKey.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class
+index 7cec421..1c7732c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/User.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class
+index 4666bcd..5441457 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class
+index f5173d5..cd9e954 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$Criterion.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class
+index db56fe2..f0999dc 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample$GeneratedCriteria.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class
+index afaa2d9..230512f 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/entity/UserExample.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class
+index 11aa5c5..38cc78e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ActivityService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class
+index 1150711..5195bab 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AddressService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class
+index 0451f80..448c9e6 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/AdminService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class
+index 0c8ffce..e700edc 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CateService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class
+index b603259..86cdd0c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ChatService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class
+index 37dd2e9..cb3dc2d 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class
+index 703ff83..0589d2b 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class
+index 77b7db1..974ebac 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class
+index 1aa3960..8cebcd2 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/ShopCartService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class
+index 59f2aaa..f54fec3 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class
+index ec1d431..b6f2d9e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ActivityServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class
+index af432c3..7fdd8bc 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AddressServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class
+index 1fab0e3..94991d3 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/AdminServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class
+index 2056c7d..6302f8d 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CateServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class
+index b9be276..b7f2f29 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ChatServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class
+index a0119a9..1eb1b4c 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class
+index f0f3111..8a1424e 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class
+index c4d6186..f6eb110 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class
+index 1c06d7d..5ed837a 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/ShopCartServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class
+index fcefe3f..354bca6 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class
+index 28d7f13..d3411b1 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/ImageUtil.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class
+index 843056c..d881917 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/Msg.class differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class
+index c892d80..b4ba439 100644
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class and b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/util/verificate/Verificate.class differ
+diff --git a/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class b/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class
+deleted file mode 100644
+index beb8477..0000000
+Binary files a/ssmschoolshop/target/test-classes/com/zhang/test/MBGTest.class and /dev/null differ
