@@ -29,4 +29,6 @@ public interface ImagePathMapper {
     int updateByPrimaryKeySelective(ImagePath record);
 
     int updateByPrimaryKey(ImagePath record);
+
+    List<ImagePath> selectByGoodIds(@Param("goodIds") List<Integer> goodIds);
 }

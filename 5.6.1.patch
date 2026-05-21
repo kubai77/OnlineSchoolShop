@@ -1,0 +1,545 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+index eb07ecf..f428169 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+@@ -51,25 +51,14 @@ public class FrontGoodsController {
+         //查询商品的基本信息
+         Goods goods = goodsService.selectById(goodsid);
+ 
+-        if (user == null) {
+-            goods.setFav(false);
+-        } else {
+-            Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goodsid));
+-            if (favorite == null) {
+-                goods.setFav(false);
+-            } else {
+-                goods.setFav(true);
+-            }
+-        }
++        //使用批量查询优化：为单个商品也创建列表并使用聚合方法
++        List<Goods> singleGoodsList = Collections.singletonList(goods);
++        Integer userId = user != null ? user.getUserid() : null;
++        goodsService.enrichGoodsWithDetails(singleGoodsList, userId);
+ 
+         //查询商品类别
+         Category category = cateService.selectById(goods.getCategory());
+ 
+-        //商品图片
+-        List<ImagePath> imagePath = goodsService.findImagePath(goodsid);
+-
+-        //商品评论
+-
+         //商品折扣信息
+         Activity activity = activityService.selectByKey(goods.getActivityid());
+         goods.setActivity(activity);
+@@ -77,21 +66,11 @@ public class FrontGoodsController {
+         //返回数据
+         goodsInfo.put("goods", goods);
+         goodsInfo.put("cate", category);
+-        goodsInfo.put("image", imagePath);
++        goodsInfo.put("image", goods.getImagePaths());
+         model.addAttribute("goodsInfo",goodsInfo);
+-//        model.addAllAttributes(goodsInfo);
+-
+-        //评论信息
+-        CommentExample commentExample=new CommentExample();
+-        commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
+-        List<Comment> commentList=commentService.selectByExample(commentExample);
+-        for (Integer i=0;i<commentList.size();i++)
+-        {
+-            Comment comment=commentList.get(i);
+-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
+-            comment.setUserName(commentUser.getUsername());
+-            commentList.set(i,comment);
+-        }
++
++        //评论信息 - 使用批量查询优化
++        List<Comment> commentList = commentService.selectCommentsWithUser(goodsid);
+         model.addAttribute("commentList",commentList);
+ 
+         return "detail";
+@@ -100,6 +79,7 @@ public class FrontGoodsController {
+     @RequestMapping(value = "/search", method = RequestMethod.GET)
+     public String searchGoods(@RequestParam(value = "page",defaultValue = "1") Integer pn, String keyword, Model model, HttpSession session) {
+         User user = (User) session.getAttribute("user");
++        Integer userId = user != null ? user.getUserid() : null;
+ 
+         //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+@@ -109,29 +89,8 @@ public class FrontGoodsController {
+         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            goodsList.set(i, goods);
+-        }
+-
++        //使用批量查询优化：一次性获取所有图片和收藏状态
++        goodsService.enrichGoodsWithDetails(goodsList, userId);
+ 
+         //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+@@ -178,6 +137,7 @@ public class FrontGoodsController {
+     @RequestMapping("/category")
+     public String getCateGoods(String cate, @RequestParam(value = "page",defaultValue = "1") Integer pn, Model model, HttpSession session) {
+         User user = (User) session.getAttribute("user");
++        Integer userId = user != null ? user.getUserid() : null;
+ 
+         //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+@@ -201,29 +161,8 @@ public class FrontGoodsController {
+         }
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            goodsList.set(i, goods);
+-        }
+-
++        //使用批量查询优化：一次性获取所有图片和收藏状态
++        goodsService.enrichGoodsWithDetails(goodsList, userId);
+ 
+         //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+index fbb198d..6bce864 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+@@ -54,7 +54,6 @@ public class MainController {
+ 
+ 
+ 
+-
+     @RequestMapping("/main")
+     public String showAllGoods(Model model, HttpSession session) {
+         Integer userid;
+@@ -104,25 +103,7 @@ public class MainController {
+ 
+         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
+ 
+-        List<Goods> goodsAndImage = new ArrayList<>();
+-        //获取每个商品的图片
+-        for (Goods goods:goodsList) {
+-            //判断是否为登录状态
+-            if (userid == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-            goods.setImagePaths(imagePathList);
+-            goodsAndImage.add(goods);
+-        }
+-        return goodsAndImage;
++        //使用批量查询优化：一次性获取所有图片和收藏状态
++        return goodsService.enrichGoodsWithDetails(goodsList, userid);
+     }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/FavoriteMapper.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/FavoriteMapper.java
+index 586c7e1..0e9456b 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/FavoriteMapper.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/FavoriteMapper.java
+@@ -30,4 +30,6 @@ public interface FavoriteMapper {
+     int updateByPrimaryKeySelective(Favorite record);
+ 
+     int updateByPrimaryKey(Favorite record);
++
++    List<Favorite> selectByUserAndGoodIds(@Param("userId") Integer userId, @Param("goodIds") List<Integer> goodIds);
+ }
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/ImagePathMapper.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/ImagePathMapper.java
+index 52ec4c5..e5ad3b5 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/ImagePathMapper.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/ImagePathMapper.java
+@@ -29,4 +29,6 @@ public interface ImagePathMapper {
+     int updateByPrimaryKeySelective(ImagePath record);
+ 
+     int updateByPrimaryKey(ImagePath record);
++
++    List<ImagePath> selectByGoodIds(@Param("goodIds") List<Integer> goodIds);
+ }
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/UserMapper.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/UserMapper.java
+index 6b0865f..1b442b3 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/UserMapper.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/UserMapper.java
+@@ -29,4 +29,6 @@ public interface UserMapper {
+     int updateByPrimaryKeySelective(User record);
+ 
+     int updateByPrimaryKey(User record);
++
++    List<User> selectByUserIds(@Param("userIds") List<Integer> userIds);
+ }
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/CommentService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/CommentService.java
+index 8c3cfeb..f6073dd 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/CommentService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/CommentService.java
+@@ -10,4 +10,6 @@ public interface CommentService {
+     public void insertSelective(Comment comment);
+ 
+     public List<Comment> selectByExample(CommentExample commentExample);
++
++    public List<Comment> selectCommentsWithUser(Integer goodsId);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..ace8978 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -29,4 +29,6 @@ public interface GoodsService {
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
++
++    public List<Goods> enrichGoodsWithDetails(List<Goods> goodsList, Integer userId);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
+index 261becd..364bab6 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/UserService.java
+@@ -17,4 +17,6 @@ public interface UserService {
+ 
+     public void updateByPrimaryKeySelective(User user);
+ 
++    public List<User> selectByUserIds(List<Integer> userIds);
++
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.java
+index fef0f7a..0943101 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.java
+@@ -2,13 +2,18 @@ package com.zhang.ssmschoolshop.service.impl;
+ 
+ 
+ import com.zhang.ssmschoolshop.dao.CommentMapper;
++import com.zhang.ssmschoolshop.dao.UserMapper;
+ import com.zhang.ssmschoolshop.entity.Comment;
+ import com.zhang.ssmschoolshop.entity.CommentExample;
++import com.zhang.ssmschoolshop.entity.User;
+ import com.zhang.ssmschoolshop.service.CommentService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
++import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.List;
++import java.util.Map;
+ 
+ @Service("commentService")
+ public class CommentServiceImpl implements CommentService {
+@@ -16,6 +21,9 @@ public class CommentServiceImpl implements CommentService {
+     @Autowired(required = false)
+     private CommentMapper commentMapper;
+ 
++    @Autowired(required = false)
++    private UserMapper userMapper;
++
+     @Override
+     public void insertSelective(Comment comment){
+         commentMapper.insertSelective(comment);
+@@ -26,4 +34,35 @@ public class CommentServiceImpl implements CommentService {
+         return commentMapper.selectByExample(commentExample);
+     }
+ 
++    @Override
++    public List<Comment> selectCommentsWithUser(Integer goodsId) {
++        CommentExample commentExample = new CommentExample();
++        commentExample.or().andGoodsidEqualTo(goodsId);
++        List<Comment> commentList = commentMapper.selectByExample(commentExample);
++
++        if (commentList.isEmpty()) {
++            return commentList;
++        }
++
++        List<Integer> userIds = new ArrayList<>();
++        for (Comment comment : commentList) {
++            userIds.add(comment.getUserid());
++        }
++
++        List<User> userList = userMapper.selectByUserIds(userIds);
++        Map<Integer, User> userMap = new HashMap<>();
++        for (User user : userList) {
++            userMap.put(user.getUserid(), user);
++        }
++
++        for (Comment comment : commentList) {
++            User user = userMap.get(comment.getUserid());
++            if (user != null) {
++                comment.setUserName(user.getUsername());
++            }
++        }
++
++        return commentList;
++    }
++
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..157708c 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -9,7 +9,7 @@ import com.zhang.ssmschoolshop.service.GoodsService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
+-import java.util.List;
++import java.util.*;
+ 
+ @Service("goodsService")
+ public class GoodsServiceImpl implements GoodsService {
+@@ -87,4 +87,37 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    @Override
++    public List<Goods> enrichGoodsWithDetails(List<Goods> goodsList, Integer userId) {
++        if (goodsList == null || goodsList.isEmpty()) {
++            return goodsList;
++        }
++
++        List<Integer> goodIds = new ArrayList<>();
++        for (Goods goods : goodsList) {
++            goodIds.add(goods.getGoodsid());
++        }
++
++        List<ImagePath> allImagePaths = imagePathMapper.selectByGoodIds(goodIds);
++        Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
++        for (ImagePath imagePath : allImagePaths) {
++            imageMap.computeIfAbsent(imagePath.getGoodid(), k -> new ArrayList<>()).add(imagePath);
++        }
++
++        Set<Integer> favoriteGoodIds = new HashSet<>();
++        if (userId != null) {
++            List<Favorite> favoriteList = favoriteMapper.selectByUserAndGoodIds(userId, goodIds);
++            for (Favorite favorite : favoriteList) {
++                favoriteGoodIds.add(favorite.getGoodsid());
++            }
++        }
++
++        for (Goods goods : goodsList) {
++            goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
++            goods.setFav(userId != null && favoriteGoodIds.contains(goods.getGoodsid()));
++        }
++
++        return goodsList;
++    }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
+index 1c824c3..0b45786 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.java
+@@ -41,6 +41,11 @@ public class UserServiceImpl implements UserService {
+         userMapper.updateByPrimaryKeySelective(user);
+     }
+ 
++    @Override
++    public List<User> selectByUserIds(List<Integer> userIds) {
++        return userMapper.selectByUserIds(userIds);
++    }
++
+ 
+    /* @Override
+     public User selectByPrimaryKeyAndPassword(int userId,String password){return userMapper.selectByPrimaryKeyAndPassword();}*/
+diff --git a/ssmschoolshop/src/main/resources/mapper/FavoriteMapper.xml b/ssmschoolshop/src/main/resources/mapper/FavoriteMapper.xml
+index 536f5df..3f3e9c3 100644
+--- a/ssmschoolshop/src/main/resources/mapper/FavoriteMapper.xml
++++ b/ssmschoolshop/src/main/resources/mapper/FavoriteMapper.xml
+@@ -178,4 +178,14 @@
+     where userId = #{userid,jdbcType=INTEGER}
+       and goodsId = #{goodsid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByUserAndGoodIds" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from collection
++    where userId = #{userId,jdbcType=INTEGER}
++      and goodsId in
++    <foreach close=")" collection="goodIds" item="goodId" open="(" separator=",">
++      #{goodId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/resources/mapper/ImagePathMapper.xml b/ssmschoolshop/src/main/resources/mapper/ImagePathMapper.xml
+index 9f155f6..d939e16 100644
+--- a/ssmschoolshop/src/main/resources/mapper/ImagePathMapper.xml
++++ b/ssmschoolshop/src/main/resources/mapper/ImagePathMapper.xml
+@@ -178,4 +178,13 @@
+       path = #{path,jdbcType=VARCHAR}
+     where pathId = #{pathid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByGoodIds" parameterType="java.util.List" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from imagepath
++    where goodId in
++    <foreach close=")" collection="goodIds" item="goodId" open="(" separator=",">
++      #{goodId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/resources/mapper/UserMapper.xml b/ssmschoolshop/src/main/resources/mapper/UserMapper.xml
+index 037f562..c73ea36 100644
+--- a/ssmschoolshop/src/main/resources/mapper/UserMapper.xml
++++ b/ssmschoolshop/src/main/resources/mapper/UserMapper.xml
+@@ -225,4 +225,13 @@
+       telephone = #{telephone,jdbcType=VARCHAR}
+     where userId = #{userid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByUserIds" parameterType="java.util.List" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from user
++    where userId in
++    <foreach close=")" collection="userIds" item="userId" open="(" separator=",">
++      #{userId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class
+deleted file mode 100644
+index 6b069d8..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class
+deleted file mode 100644
+index de158b6..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/MainController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class
+deleted file mode 100644
+index 7105d53..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/FavoriteMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class
+deleted file mode 100644
+index 3e2c287..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/ImagePathMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class
+deleted file mode 100644
+index 5e99e07..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/UserMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class
+deleted file mode 100644
+index 37dd2e9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/CommentService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class
+deleted file mode 100644
+index 703ff83..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/GoodsService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class
+deleted file mode 100644
+index 59f2aaa..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/UserService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class
+deleted file mode 100644
+index a0119a9..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/CommentServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class
+deleted file mode 100644
+index f0f3111..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class
+deleted file mode 100644
+index fcefe3f..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/UserServiceImpl.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/mapper/FavoriteMapper.xml b/ssmschoolshop/target/classes/mapper/FavoriteMapper.xml
+index 536f5df..3f3e9c3 100644
+--- a/ssmschoolshop/target/classes/mapper/FavoriteMapper.xml
++++ b/ssmschoolshop/target/classes/mapper/FavoriteMapper.xml
+@@ -178,4 +178,14 @@
+     where userId = #{userid,jdbcType=INTEGER}
+       and goodsId = #{goodsid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByUserAndGoodIds" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from collection
++    where userId = #{userId,jdbcType=INTEGER}
++      and goodsId in
++    <foreach close=")" collection="goodIds" item="goodId" open="(" separator=",">
++      #{goodId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/target/classes/mapper/ImagePathMapper.xml b/ssmschoolshop/target/classes/mapper/ImagePathMapper.xml
+index 9f155f6..d939e16 100644
+--- a/ssmschoolshop/target/classes/mapper/ImagePathMapper.xml
++++ b/ssmschoolshop/target/classes/mapper/ImagePathMapper.xml
+@@ -178,4 +178,13 @@
+       path = #{path,jdbcType=VARCHAR}
+     where pathId = #{pathid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByGoodIds" parameterType="java.util.List" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from imagepath
++    where goodId in
++    <foreach close=")" collection="goodIds" item="goodId" open="(" separator=",">
++      #{goodId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/target/classes/mapper/UserMapper.xml b/ssmschoolshop/target/classes/mapper/UserMapper.xml
+index 037f562..c73ea36 100644
+--- a/ssmschoolshop/target/classes/mapper/UserMapper.xml
++++ b/ssmschoolshop/target/classes/mapper/UserMapper.xml
+@@ -225,4 +225,13 @@
+       telephone = #{telephone,jdbcType=VARCHAR}
+     where userId = #{userid,jdbcType=INTEGER}
+   </update>
++  <select id="selectByUserIds" parameterType="java.util.List" resultMap="BaseResultMap">
++    select
++    <include refid="Base_Column_List" />
++    from user
++    where userId in
++    <foreach close=")" collection="userIds" item="userId" open="(" separator=",">
++      #{userId,jdbcType=INTEGER}
++    </foreach>
++  </select>
+ </mapper>
+\ No newline at end of file

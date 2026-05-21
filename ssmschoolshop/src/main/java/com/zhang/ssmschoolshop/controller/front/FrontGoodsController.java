@@ -51,24 +51,13 @@ public class FrontGoodsController {
         //查询商品的基本信息
         Goods goods = goodsService.selectById(goodsid);
 
-        if (user == null) {
-            goods.setFav(false);
-        } else {
-            Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goodsid));
-            if (favorite == null) {
-                goods.setFav(false);
-            } else {
-                goods.setFav(true);
-            }
-        }
+        //使用批量查询优化：为单个商品也创建列表并使用聚合方法
+        List<Goods> singleGoodsList = Collections.singletonList(goods);
+        Integer userId = user != null ? user.getUserid() : null;
+        goodsService.enrichGoodsWithDetails(singleGoodsList, userId);
 
         //查询商品类别
         Category category = cateService.selectById(goods.getCategory());
-
-        //商品图片
-        List<ImagePath> imagePath = goodsService.findImagePath(goodsid);
-
-        //商品评论
 
         //商品折扣信息
         Activity activity = activityService.selectByKey(goods.getActivityid());
@@ -77,21 +66,11 @@ public class FrontGoodsController {
         //返回数据
         goodsInfo.put("goods", goods);
         goodsInfo.put("cate", category);
-        goodsInfo.put("image", imagePath);
+        goodsInfo.put("image", goods.getImagePaths());
         model.addAttribute("goodsInfo",goodsInfo);
-//        model.addAllAttributes(goodsInfo);
 
-        //评论信息
-        CommentExample commentExample=new CommentExample();
-        commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
-        List<Comment> commentList=commentService.selectByExample(commentExample);
-        for (Integer i=0;i<commentList.size();i++)
-        {
-            Comment comment=commentList.get(i);
-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
-            comment.setUserName(commentUser.getUsername());
-            commentList.set(i,comment);
-        }
+        //评论信息 - 使用批量查询优化
+        List<Comment> commentList = commentService.selectCommentsWithUser(goodsid);
         model.addAttribute("commentList",commentList);
 
         return "detail";
@@ -100,6 +79,7 @@ public class FrontGoodsController {
     @RequestMapping(value = "/search", method = RequestMethod.GET)
     public String searchGoods(@RequestParam(value = "page",defaultValue = "1") Integer pn, String keyword, Model model, HttpSession session) {
         User user = (User) session.getAttribute("user");
+        Integer userId = user != null ? user.getUserid() : null;
 
         //一页显示几个数据
         PageHelper.startPage(pn, 16);
@@ -109,29 +89,8 @@ public class FrontGoodsController {
         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
-
-            goodsList.set(i, goods);
-        }
-
+        //使用批量查询优化：一次性获取所有图片和收藏状态
+        goodsService.enrichGoodsWithDetails(goodsList, userId);
 
         //显示几个页号
         PageInfo page = new PageInfo(goodsList,5);
@@ -178,6 +137,7 @@ public class FrontGoodsController {
     @RequestMapping("/category")
     public String getCateGoods(String cate, @RequestParam(value = "page",defaultValue = "1") Integer pn, Model model, HttpSession session) {
         User user = (User) session.getAttribute("user");
+        Integer userId = user != null ? user.getUserid() : null;
 
         //一页显示几个数据
         PageHelper.startPage(pn, 16);
@@ -201,29 +161,8 @@ public class FrontGoodsController {
         }
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
-
-            goodsList.set(i, goods);
-        }
-
+        //使用批量查询优化：一次性获取所有图片和收藏状态
+        goodsService.enrichGoodsWithDetails(goodsList, userId);
 
         //显示几个页号
         PageInfo page = new PageInfo(goodsList,5);

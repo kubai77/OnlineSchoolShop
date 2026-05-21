@@ -10,4 +10,6 @@ public interface CommentService {
     public void insertSelective(Comment comment);
 
     public List<Comment> selectByExample(CommentExample commentExample);
+
+    public List<Comment> selectCommentsWithUser(Integer goodsId);
 }

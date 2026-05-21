@@ -178,4 +178,14 @@
     where userId = #{userid,jdbcType=INTEGER}
       and goodsId = #{goodsid,jdbcType=INTEGER}
   </update>
+  <select id="selectByUserAndGoodIds" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from collection
+    where userId = #{userId,jdbcType=INTEGER}
+      and goodsId in
+    <foreach close=")" collection="goodIds" item="goodId" open="(" separator=",">
+      #{goodId,jdbcType=INTEGER}
+    </foreach>
+  </select>
 </mapper>

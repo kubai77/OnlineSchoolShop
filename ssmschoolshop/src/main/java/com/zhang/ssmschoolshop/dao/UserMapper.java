@@ -29,4 +29,6 @@ public interface UserMapper {
     int updateByPrimaryKeySelective(User record);
 
     int updateByPrimaryKey(User record);
+
+    List<User> selectByUserIds(@Param("userIds") List<Integer> userIds);
 }

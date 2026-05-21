@@ -54,7 +54,6 @@ public class MainController {
 
 
 
-
     @RequestMapping("/main")
     public String showAllGoods(Model model, HttpSession session) {
         Integer userid;
@@ -104,25 +103,7 @@ public class MainController {
 
         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
 
-        List<Goods> goodsAndImage = new ArrayList<>();
-        //获取每个商品的图片
-        for (Goods goods:goodsList) {
-            //判断是否为登录状态
-            if (userid == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-            goods.setImagePaths(imagePathList);
-            goodsAndImage.add(goods);
-        }
-        return goodsAndImage;
+        //使用批量查询优化：一次性获取所有图片和收藏状态
+        return goodsService.enrichGoodsWithDetails(goodsList, userid);
     }
 }
