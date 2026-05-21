@@ -85,12 +85,24 @@ public class FrontGoodsController {
         CommentExample commentExample=new CommentExample();
         commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
         List<Comment> commentList=commentService.selectByExample(commentExample);
-        for (Integer i=0;i<commentList.size();i++)
-        {
-            Comment comment=commentList.get(i);
-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
-            comment.setUserName(commentUser.getUsername());
-            commentList.set(i,comment);
+        if (commentList != null && !commentList.isEmpty()) {
+            List<Integer> userIds = new ArrayList<>();
+            for (Comment comment : commentList) {
+                userIds.add(comment.getUserid());
+            }
+            UserExample userExample = new UserExample();
+            userExample.or().andUseridIn(userIds);
+            List<User> userList = userService.selectByExample(userExample);
+            Map<Integer, String> userMap = new HashMap<>();
+            for (User u : userList) {
+                userMap.put(u.getUserid(), u.getUsername());
+            }
+            for (Integer i=0;i<commentList.size();i++)
+            {
+                Comment comment=commentList.get(i);
+                comment.setUserName(userMap.get(comment.getUserid()));
+                commentList.set(i,comment);
+            }
         }
         model.addAttribute("commentList",commentList);
 
@@ -109,27 +121,39 @@ public class FrontGoodsController {
         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        if (goodsList != null && !goodsList.isEmpty()) {
+            List<Integer> goodsIds = new ArrayList<>();
+            for (Goods goods : goodsList) {
+                goodsIds.add(goods.getGoodsid());
+            }
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+            // Batch query images
+            ImagePathExample imagePathExample = new ImagePathExample();
+            imagePathExample.or().andGoodidIn(goodsIds);
+            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
+            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
+            for (ImagePath img : allImages) {
+                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
+            }
 
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
+            // Batch query favorites
+            Set<Integer> favGoodsIds = new HashSet<>();
+            if (user != null) {
+                FavoriteExample favExample = new FavoriteExample();
+                favExample.or().andUseridEqualTo(user.getUserid()).andGoodsidIn(goodsIds);
+                List<Favorite> favList = goodsService.selectFavByExample(favExample);
+                for (Favorite fav : favList) {
+                    favGoodsIds.add(fav.getGoodsid());
                 }
             }
 
-            goodsList.set(i, goods);
+            //获取图片地址
+            for (int i = 0; i < goodsList.size(); i++) {
+                Goods goods = goodsList.get(i);
+                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
+                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+                goodsList.set(i, goods);
+            }
         }
 
 
@@ -201,27 +225,39 @@ public class FrontGoodsController {
         }
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        if (goodsList != null && !goodsList.isEmpty()) {
+            List<Integer> goodsIds = new ArrayList<>();
+            for (Goods goods : goodsList) {
+                goodsIds.add(goods.getGoodsid());
+            }
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+            // Batch query images
+            ImagePathExample imagePathExample = new ImagePathExample();
+            imagePathExample.or().andGoodidIn(goodsIds);
+            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
+            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
+            for (ImagePath img : allImages) {
+                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
+            }
 
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
+            // Batch query favorites
+            Set<Integer> favGoodsIds = new HashSet<>();
+            if (user != null) {
+                FavoriteExample favExample = new FavoriteExample();
+                favExample.or().andUseridEqualTo(user.getUserid()).andGoodsidIn(goodsIds);
+                List<Favorite> favList = goodsService.selectFavByExample(favExample);
+                for (Favorite fav : favList) {
+                    favGoodsIds.add(fav.getGoodsid());
                 }
             }
 
-            goodsList.set(i, goods);
+            //获取图片地址
+            for (int i = 0; i < goodsList.size(); i++) {
+                Goods goods = goodsList.get(i);
+                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
+                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+                goodsList.set(i, goods);
+            }
         }
 
 

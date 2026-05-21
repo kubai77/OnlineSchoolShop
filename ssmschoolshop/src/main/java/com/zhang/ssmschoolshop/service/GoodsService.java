@@ -18,6 +18,8 @@ public interface GoodsService {
 
     public List<ImagePath> findImagePath(Integer goodsid);
 
+    public List<ImagePath> selectImagePathByExample(ImagePathExample example);
+
     public Goods selectById(Integer goodsid);
 
     public List<Goods> selectByExampleLimit(GoodsExample digGoodsExample);

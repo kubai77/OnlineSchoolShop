@@ -21,6 +21,10 @@ import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 
 @Controller
 public class CustomerController {
@@ -258,18 +262,24 @@ public class CustomerController {
             goodsList = goodsService.selectByExample(goodsExample);
         }
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        if (goodsList != null && !goodsList.isEmpty()) {
+            // Batch query images
+            ImagePathExample imagePathExample = new ImagePathExample();
+            imagePathExample.or().andGoodidIn(goodsIdList);
+            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
+            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
+            for (ImagePath img : allImages) {
+                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
+            }
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            goods.setFav(true);
-
-            goodsList.set(i, goods);
+            //获取图片地址
+            for (int i = 0; i < goodsList.size(); i++) {
+                Goods goods = goodsList.get(i);
+                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
+                //判断是否收藏
+                goods.setFav(true);
+                goodsList.set(i, goods);
+            }
         }
 
         //显示几个页号

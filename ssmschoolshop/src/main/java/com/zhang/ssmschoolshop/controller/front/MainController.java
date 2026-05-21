@@ -104,23 +104,40 @@ public class MainController {
 
         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
 
+        if (goodsList == null || goodsList.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Integer> goodsIds = new ArrayList<>();
+        for (Goods goods : goodsList) {
+            goodsIds.add(goods.getGoodsid());
+        }
+
+        // Batch query images
+        ImagePathExample imagePathExample = new ImagePathExample();
+        imagePathExample.or().andGoodidIn(goodsIds);
+        List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
+        Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
+        for (ImagePath img : allImages) {
+            imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
+        }
+
+        // Batch query favorites
+        Set<Integer> favGoodsIds = new HashSet<>();
+        if (userid != null) {
+            FavoriteExample favExample = new FavoriteExample();
+            favExample.or().andUseridEqualTo(userid).andGoodsidIn(goodsIds);
+            List<Favorite> favList = goodsService.selectFavByExample(favExample);
+            for (Favorite fav : favList) {
+                favGoodsIds.add(fav.getGoodsid());
+            }
+        }
+
         List<Goods> goodsAndImage = new ArrayList<>();
         //获取每个商品的图片
         for (Goods goods:goodsList) {
-            //判断是否为登录状态
-            if (userid == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-            goods.setImagePaths(imagePathList);
+            goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+            goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
             goodsAndImage.add(goods);
         }
         return goodsAndImage;

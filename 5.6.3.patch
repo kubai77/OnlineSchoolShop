@@ -1,0 +1,287 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index e38ef88..6af2840 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -21,6 +21,10 @@ import javax.servlet.http.HttpSession;
+ import java.util.ArrayList;
+ import java.util.Date;
+ import java.util.List;
++import java.util.Map;
++import java.util.HashMap;
++import java.util.Set;
++import java.util.HashSet;
+ 
+ @Controller
+ public class CustomerController {
+@@ -258,18 +262,24 @@ public class CustomerController {
+             goodsList = goodsService.selectByExample(goodsExample);
+         }
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            goods.setFav(true);
+-
+-            goodsList.set(i, goods);
++        if (goodsList != null && !goodsList.isEmpty()) {
++            // Batch query images
++            ImagePathExample imagePathExample = new ImagePathExample();
++            imagePathExample.or().andGoodidIn(goodsIdList);
++            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
++            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
++            for (ImagePath img : allImages) {
++                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
++            }
++
++            //获取图片地址
++            for (int i = 0; i < goodsList.size(); i++) {
++                Goods goods = goodsList.get(i);
++                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
++                //判断是否收藏
++                goods.setFav(true);
++                goodsList.set(i, goods);
++            }
+         }
+ 
+         //显示几个页号
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+index eb07ecf..24005a3 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+@@ -85,12 +85,24 @@ public class FrontGoodsController {
+         CommentExample commentExample=new CommentExample();
+         commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
+         List<Comment> commentList=commentService.selectByExample(commentExample);
+-        for (Integer i=0;i<commentList.size();i++)
+-        {
+-            Comment comment=commentList.get(i);
+-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
+-            comment.setUserName(commentUser.getUsername());
+-            commentList.set(i,comment);
++        if (commentList != null && !commentList.isEmpty()) {
++            List<Integer> userIds = new ArrayList<>();
++            for (Comment comment : commentList) {
++                userIds.add(comment.getUserid());
++            }
++            UserExample userExample = new UserExample();
++            userExample.or().andUseridIn(userIds);
++            List<User> userList = userService.selectByExample(userExample);
++            Map<Integer, String> userMap = new HashMap<>();
++            for (User u : userList) {
++                userMap.put(u.getUserid(), u.getUsername());
++            }
++            for (Integer i=0;i<commentList.size();i++)
++            {
++                Comment comment=commentList.get(i);
++                comment.setUserName(userMap.get(comment.getUserid()));
++                commentList.set(i,comment);
++            }
+         }
+         model.addAttribute("commentList",commentList);
+ 
+@@ -109,27 +121,39 @@ public class FrontGoodsController {
+         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
++        if (goodsList != null && !goodsList.isEmpty()) {
++            List<Integer> goodsIds = new ArrayList<>();
++            for (Goods goods : goodsList) {
++                goodsIds.add(goods.getGoodsid());
++            }
+ 
+-            goods.setImagePaths(imagePathList);
++            // Batch query images
++            ImagePathExample imagePathExample = new ImagePathExample();
++            imagePathExample.or().andGoodidIn(goodsIds);
++            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
++            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
++            for (ImagePath img : allImages) {
++                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
++            }
+ 
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
++            // Batch query favorites
++            Set<Integer> favGoodsIds = new HashSet<>();
++            if (user != null) {
++                FavoriteExample favExample = new FavoriteExample();
++                favExample.or().andUseridEqualTo(user.getUserid()).andGoodsidIn(goodsIds);
++                List<Favorite> favList = goodsService.selectFavByExample(favExample);
++                for (Favorite fav : favList) {
++                    favGoodsIds.add(fav.getGoodsid());
+                 }
+             }
+ 
+-            goodsList.set(i, goods);
++            //获取图片地址
++            for (int i = 0; i < goodsList.size(); i++) {
++                Goods goods = goodsList.get(i);
++                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
++                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
++                goodsList.set(i, goods);
++            }
+         }
+ 
+ 
+@@ -201,27 +225,39 @@ public class FrontGoodsController {
+         }
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
++        if (goodsList != null && !goodsList.isEmpty()) {
++            List<Integer> goodsIds = new ArrayList<>();
++            for (Goods goods : goodsList) {
++                goodsIds.add(goods.getGoodsid());
++            }
+ 
+-            goods.setImagePaths(imagePathList);
++            // Batch query images
++            ImagePathExample imagePathExample = new ImagePathExample();
++            imagePathExample.or().andGoodidIn(goodsIds);
++            List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
++            Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
++            for (ImagePath img : allImages) {
++                imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
++            }
+ 
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
++            // Batch query favorites
++            Set<Integer> favGoodsIds = new HashSet<>();
++            if (user != null) {
++                FavoriteExample favExample = new FavoriteExample();
++                favExample.or().andUseridEqualTo(user.getUserid()).andGoodsidIn(goodsIds);
++                List<Favorite> favList = goodsService.selectFavByExample(favExample);
++                for (Favorite fav : favList) {
++                    favGoodsIds.add(fav.getGoodsid());
+                 }
+             }
+ 
+-            goodsList.set(i, goods);
++            //获取图片地址
++            for (int i = 0; i < goodsList.size(); i++) {
++                Goods goods = goodsList.get(i);
++                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
++                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
++                goodsList.set(i, goods);
++            }
+         }
+ 
+ 
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+index fbb198d..545ded5 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+@@ -104,23 +104,40 @@ public class MainController {
+ 
+         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
+ 
++        if (goodsList == null || goodsList.isEmpty()) {
++            return new ArrayList<>();
++        }
++
++        List<Integer> goodsIds = new ArrayList<>();
++        for (Goods goods : goodsList) {
++            goodsIds.add(goods.getGoodsid());
++        }
++
++        // Batch query images
++        ImagePathExample imagePathExample = new ImagePathExample();
++        imagePathExample.or().andGoodidIn(goodsIds);
++        List<ImagePath> allImages = goodsService.selectImagePathByExample(imagePathExample);
++        Map<Integer, List<ImagePath>> imageMap = new HashMap<>();
++        for (ImagePath img : allImages) {
++            imageMap.computeIfAbsent(img.getGoodid(), k -> new ArrayList<>()).add(img);
++        }
++
++        // Batch query favorites
++        Set<Integer> favGoodsIds = new HashSet<>();
++        if (userid != null) {
++            FavoriteExample favExample = new FavoriteExample();
++            favExample.or().andUseridEqualTo(userid).andGoodsidIn(goodsIds);
++            List<Favorite> favList = goodsService.selectFavByExample(favExample);
++            for (Favorite fav : favList) {
++                favGoodsIds.add(fav.getGoodsid());
++            }
++        }
++
+         List<Goods> goodsAndImage = new ArrayList<>();
+         //获取每个商品的图片
+         for (Goods goods:goodsList) {
+-            //判断是否为登录状态
+-            if (userid == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-            goods.setImagePaths(imagePathList);
++            goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
++            goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), new ArrayList<>()));
+             goodsAndImage.add(goods);
+         }
+         return goodsAndImage;
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..9e5077e 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -18,6 +18,8 @@ public interface GoodsService {
+ 
+     public List<ImagePath> findImagePath(Integer goodsid);
+ 
++    public List<ImagePath> selectImagePathByExample(ImagePathExample example);
++
+     public Goods selectById(Integer goodsid);
+ 
+     public List<Goods> selectByExampleLimit(GoodsExample digGoodsExample);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..cfaae8b 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -58,6 +58,11 @@ public class GoodsServiceImpl implements GoodsService {
+         return imagePathMapper.selectByExample(imagePathExample);
+     }
+ 
++    @Override
++    public List<ImagePath> selectImagePathByExample(ImagePathExample example) {
++        return imagePathMapper.selectByExample(example);
++    }
++
+     @Override
+     public Goods selectById(Integer goodsid) {
+         return goodsMapper.selectByPrimaryKey(goodsid);
