@@ -1,0 +1,531 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+index e38ef88..7efd077 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/CustomerController.java
+@@ -239,7 +239,6 @@ public class CustomerController {
+             return "redirect:/login";
+         }
+ 
+-        //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+ 
+         FavoriteExample favoriteExample = new FavoriteExample();
+@@ -252,27 +251,13 @@ public class CustomerController {
+         }
+ 
+         GoodsExample goodsExample = new GoodsExample();
+-        List<Goods> goodsList = new ArrayList<>();
++        List<Goods> goodsList = new ArrayList<Goods>();
+         if (!goodsIdList.isEmpty()) {
+             goodsExample.or().andGoodsidIn(goodsIdList);
+             goodsList = goodsService.selectByExample(goodsExample);
++            goodsService.enrichGoodsList(goodsList, user.getUserid());
+         }
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            goods.setFav(true);
+-
+-            goodsList.set(i, goods);
+-        }
+-
+-        //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+         model.addAttribute("pageInfo", page);
+ 
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+index eb07ecf..18f0251 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/FrontGoodsController.java
+@@ -16,7 +16,13 @@ import org.springframework.web.bind.annotation.ResponseBody;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpSession;
+-import java.util.*;
++import java.util.ArrayList;
++import java.util.Date;
++import java.util.HashMap;
++import java.util.LinkedHashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
+ 
+ @Controller
+ public class FrontGoodsController {
+@@ -45,10 +51,7 @@ public class FrontGoodsController {
+ 
+         User user = (User) session.getAttribute("user");
+ 
+-        //要传回的数据存在HashMap中
+         Map<String,Object> goodsInfo = new HashMap<String,Object>();
+-
+-        //查询商品的基本信息
+         Goods goods = goodsService.selectById(goodsid);
+ 
+         if (user == null) {
+@@ -62,78 +65,29 @@ public class FrontGoodsController {
+             }
+         }
+ 
+-        //查询商品类别
+         Category category = cateService.selectById(goods.getCategory());
+-
+-        //商品图片
+         List<ImagePath> imagePath = goodsService.findImagePath(goodsid);
+-
+-        //商品评论
+-
+-        //商品折扣信息
+         Activity activity = activityService.selectByKey(goods.getActivityid());
+         goods.setActivity(activity);
+ 
+-        //返回数据
+         goodsInfo.put("goods", goods);
+         goodsInfo.put("cate", category);
+         goodsInfo.put("image", imagePath);
+         model.addAttribute("goodsInfo",goodsInfo);
+-//        model.addAllAttributes(goodsInfo);
+-
+-        //评论信息
+-        CommentExample commentExample=new CommentExample();
+-        commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
+-        List<Comment> commentList=commentService.selectByExample(commentExample);
+-        for (Integer i=0;i<commentList.size();i++)
+-        {
+-            Comment comment=commentList.get(i);
+-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
+-            comment.setUserName(commentUser.getUsername());
+-            commentList.set(i,comment);
+-        }
+-        model.addAttribute("commentList",commentList);
++        model.addAttribute("commentList", getCommentList(goods.getGoodsid()));
+ 
+         return "detail";
+     }
+ 
+     @RequestMapping(value = "/search", method = RequestMethod.GET)
+     public String searchGoods(@RequestParam(value = "page",defaultValue = "1") Integer pn, String keyword, Model model, HttpSession session) {
+-        User user = (User) session.getAttribute("user");
+-
+-        //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+ 
+-        //查询数据
+         GoodsExample goodsExample = new GoodsExample();
+         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
++        goodsService.enrichGoodsList(goodsList, getUserid(session));
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            goodsList.set(i, goods);
+-        }
+-
+-
+-        //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+         model.addAttribute("pageInfo", page);
+         model.addAttribute("keyword", keyword);
+@@ -144,13 +98,11 @@ public class FrontGoodsController {
+     @RequestMapping("/collect")
+     @ResponseBody
+     public Msg collectGoods(Integer goodsid, HttpSession session) {
+-        //取登录用户信息,未登录重定向至登录页面
+         User user = (User) session.getAttribute("user");
+         if(user == null) {
+             return Msg.fail("收藏失败");
+         }
+ 
+-        //添加收藏
+         Favorite favorite = new Favorite();
+         favorite.setCollecttime(new Date());
+         favorite.setGoodsid(goodsid);
+@@ -169,7 +121,6 @@ public class FrontGoodsController {
+             return Msg.fail("取消收藏失败");
+         }
+ 
+-        //删除收藏
+         goodsService.deleteFavByKey(new FavoriteKey(user.getUserid(),goodsid));
+ 
+         return Msg.success("取消收藏成功");
+@@ -177,55 +128,25 @@ public class FrontGoodsController {
+ 
+     @RequestMapping("/category")
+     public String getCateGoods(String cate, @RequestParam(value = "page",defaultValue = "1") Integer pn, Model model, HttpSession session) {
+-        User user = (User) session.getAttribute("user");
+-
+-        //一页显示几个数据
+         PageHelper.startPage(pn, 16);
+ 
+-        //查询分类id
+         CategoryExample categoryExample = new CategoryExample();
+         categoryExample.or().andCatenameLike(cate);
+         List<Category> categoryList = cateService.selectByExample(categoryExample);
+ 
+-        //获取查出的类别id
+-        List<Integer> cateId = new ArrayList<>();
++        List<Integer> cateId = new ArrayList<Integer>();
+         for (Category category : categoryList) {
+             cateId.add(category.getCateid());
+         }
+ 
+-        //查询数据
+         GoodsExample goodsExample = new GoodsExample();
+         goodsExample.or().andDetailcateLike("%" + cate + "%");
+         if (!cateId.isEmpty()) {
+             goodsExample.or().andCategoryIn(cateId);
+         }
+         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
++        goodsService.enrichGoodsList(goodsList, getUserid(session));
+ 
+-        //获取图片地址
+-        for (int i = 0; i < goodsList.size(); i++) {
+-            Goods goods = goodsList.get(i);
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-
+-            goods.setImagePaths(imagePathList);
+-
+-            //判断是否收藏
+-            if (user == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            goodsList.set(i, goods);
+-        }
+-
+-
+-        //显示几个页号
+         PageInfo page = new PageInfo(goodsList,5);
+         model.addAttribute("pageInfo", page);
+         model.addAttribute("cate", cate);
+@@ -248,4 +169,45 @@ public class FrontGoodsController {
+         commentService.insertSelective(comment);
+         return Msg.success("评论成功");
+     }
++
++    private Integer getUserid(HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return null;
++        }
++        return user.getUserid();
++    }
++
++    private List<Comment> getCommentList(Integer goodsid) {
++        CommentExample commentExample = new CommentExample();
++        commentExample.or().andGoodsidEqualTo(goodsid);
++        List<Comment> commentList = commentService.selectByExample(commentExample);
++        if (commentList.isEmpty()) {
++            return commentList;
++        }
++
++        Set<Integer> userIdSet = new LinkedHashSet<Integer>();
++        for (Comment comment : commentList) {
++            if (comment.getUserid() != null) {
++                userIdSet.add(comment.getUserid());
++            }
++        }
++
++        if (userIdSet.isEmpty()) {
++            return commentList;
++        }
++
++        UserExample userExample = new UserExample();
++        userExample.or().andUseridIn(new ArrayList<Integer>(userIdSet));
++        List<User> userList = userService.selectByExample(userExample);
++        Map<Integer, String> usernameMap = new HashMap<Integer, String>();
++        for (User currentUser : userList) {
++            usernameMap.put(currentUser.getUserid(), currentUser.getUsername());
++        }
++
++        for (Comment comment : commentList) {
++            comment.setUserName(usernameMap.get(comment.getUserid()));
++        }
++        return commentList;
++    }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+index fbb198d..43f4eed 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/MainController.java
+@@ -1,7 +1,11 @@
+ package com.zhang.ssmschoolshop.controller.front;
+ 
+ 
+-import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.entity.Category;
++import com.zhang.ssmschoolshop.entity.CategoryExample;
++import com.zhang.ssmschoolshop.entity.Goods;
++import com.zhang.ssmschoolshop.entity.GoodsExample;
++import com.zhang.ssmschoolshop.entity.User;
+ import com.zhang.ssmschoolshop.service.CateService;
+ import com.zhang.ssmschoolshop.service.GoodsService;
+ import org.springframework.beans.factory.annotation.Autowired;
+@@ -25,30 +29,7 @@ public class MainController {
+ 
+     @RequestMapping("/")
+     public String showAdmin(Model model, HttpSession session) {
+-        Integer userid;
+-        User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            userid = null;
+-        } else {
+-            userid = user.getUserid();
+-        }
+-
+-        //数码分类
+-        List<Goods> digGoods = getCateGoods("数码", userid);
+-        model.addAttribute("digGoods", digGoods);
+-
+-        //家电
+-        List<Goods> houseGoods = getCateGoods("家电", userid);
+-        model.addAttribute("houseGoods", houseGoods);
+-
+-        //服饰
+-        List<Goods> colGoods = getCateGoods("服饰", userid);
+-        model.addAttribute("colGoods", colGoods);
+-
+-        //书籍
+-        List<Goods> bookGoods = getCateGoods("书籍", userid);
+-        model.addAttribute("bookGoods", bookGoods);
+-
++        loadMainGoods(model, session);
+         return "main";
+     }
+ 
+@@ -57,35 +38,11 @@ public class MainController {
+ 
+     @RequestMapping("/main")
+     public String showAllGoods(Model model, HttpSession session) {
+-        Integer userid;
+-        User user = (User) session.getAttribute("user");
+-        if (user == null) {
+-            userid = null;
+-        } else {
+-            userid = user.getUserid();
+-        }
+-
+-        //数码分类
+-        List<Goods> digGoods = getCateGoods("数码", userid);
+-        model.addAttribute("digGoods", digGoods);
+-
+-        //家电
+-        List<Goods> houseGoods = getCateGoods("家电", userid);
+-        model.addAttribute("houseGoods", houseGoods);
+-
+-        //服饰
+-        List<Goods> colGoods = getCateGoods("服饰", userid);
+-        model.addAttribute("colGoods", colGoods);
+-
+-        //书籍
+-        List<Goods> bookGoods = getCateGoods("书籍", userid);
+-        model.addAttribute("bookGoods", bookGoods);
+-
++        loadMainGoods(model, session);
+         return "main";
+     }
+ 
+     public List<Goods> getCateGoods(String cate, Integer userid) {
+-        //查询分类
+         CategoryExample digCategoryExample = new CategoryExample();
+         digCategoryExample.or().andCatenameLike(cate);
+         List<Category> digCategoryList = cateService.selectByExample(digCategoryExample);
+@@ -94,7 +51,6 @@ public class MainController {
+             return null;
+         }
+ 
+-        //查询属于刚查到的分类的商品
+         GoodsExample digGoodsExample = new GoodsExample();
+         List<Integer> digCateId = new ArrayList<Integer>();
+         for (Category tmp:digCategoryList) {
+@@ -103,26 +59,22 @@ public class MainController {
+         digGoodsExample.or().andCategoryIn(digCateId);
+ 
+         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
++        return goodsService.enrichGoodsList(goodsList, userid);
++    }
+ 
+-        List<Goods> goodsAndImage = new ArrayList<>();
+-        //获取每个商品的图片
+-        for (Goods goods:goodsList) {
+-            //判断是否为登录状态
+-            if (userid == null) {
+-                goods.setFav(false);
+-            } else {
+-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
+-                if (favorite == null) {
+-                    goods.setFav(false);
+-                } else {
+-                    goods.setFav(true);
+-                }
+-            }
+-
+-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+-            goods.setImagePaths(imagePathList);
+-            goodsAndImage.add(goods);
++    private void loadMainGoods(Model model, HttpSession session) {
++        Integer userid = getUserid(session);
++        model.addAttribute("digGoods", getCateGoods("数码", userid));
++        model.addAttribute("houseGoods", getCateGoods("家电", userid));
++        model.addAttribute("colGoods", getCateGoods("服饰", userid));
++        model.addAttribute("bookGoods", getCateGoods("书籍", userid));
++    }
++
++    private Integer getUserid(HttpSession session) {
++        User user = (User) session.getAttribute("user");
++        if (user == null) {
++            return null;
+         }
+-        return goodsAndImage;
++        return user.getUserid();
+     }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..906ecef 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -22,6 +22,8 @@ public interface GoodsService {
+ 
+     public List<Goods> selectByExampleLimit(GoodsExample digGoodsExample);
+ 
++    public List<Goods> enrichGoodsList(List<Goods> goodsList, Integer userid);
++
+     public void addFavorite(Favorite favorite);
+ 
+     public Favorite selectFavByKey(FavoriteKey favoriteKey);
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..b24c0b5 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -9,7 +9,13 @@ import com.zhang.ssmschoolshop.service.GoodsService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.LinkedHashSet;
+ import java.util.List;
++import java.util.Map;
++import java.util.Set;
+ 
+ @Service("goodsService")
+ public class GoodsServiceImpl implements GoodsService {
+@@ -68,6 +74,27 @@ public class GoodsServiceImpl implements GoodsService {
+         return goodsMapper.selectByExampleWithBLOBsLimit(digGoodsExample);
+     }
+ 
++    @Override
++    public List<Goods> enrichGoodsList(List<Goods> goodsList, Integer userid) {
++        if (goodsList == null || goodsList.isEmpty()) {
++            return goodsList;
++        }
++
++        List<Integer> goodsIdList = getGoodsIdList(goodsList);
++        Map<Integer, List<ImagePath>> imagePathMap = getImagePathMap(goodsIdList);
++        Set<Integer> favoriteGoodsIdSet = getFavoriteGoodsIdSet(userid, goodsIdList);
++
++        for (Goods goods : goodsList) {
++            List<ImagePath> imagePathList = imagePathMap.get(goods.getGoodsid());
++            if (imagePathList == null) {
++                imagePathList = new ArrayList<>();
++            }
++            goods.setImagePaths(imagePathList);
++            goods.setFav(favoriteGoodsIdSet.contains(goods.getGoodsid()));
++        }
++        return goodsList;
++    }
++
+     @Override
+     public void addFavorite(Favorite favorite) {
+         favoriteMapper.insertSelective(favorite);
+@@ -87,4 +114,52 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    private List<Integer> getGoodsIdList(List<Goods> goodsList) {
++        Set<Integer> goodsIdSet = new LinkedHashSet<Integer>();
++        for (Goods goods : goodsList) {
++            if (goods != null && goods.getGoodsid() != null) {
++                goodsIdSet.add(goods.getGoodsid());
++            }
++        }
++        return new ArrayList<Integer>(goodsIdSet);
++    }
++
++    private Map<Integer, List<ImagePath>> getImagePathMap(List<Integer> goodsIdList) {
++        Map<Integer, List<ImagePath>> imagePathMap = new HashMap<Integer, List<ImagePath>>();
++        if (goodsIdList.isEmpty()) {
++            return imagePathMap;
++        }
++
++        ImagePathExample imagePathExample = new ImagePathExample();
++        imagePathExample.or().andGoodidIn(goodsIdList);
++        List<ImagePath> imagePathList = imagePathMapper.selectByExample(imagePathExample);
++
++        for (ImagePath imagePath : imagePathList) {
++            Integer goodsid = imagePath.getGoodid();
++            List<ImagePath> currentImagePathList = imagePathMap.get(goodsid);
++            if (currentImagePathList == null) {
++                currentImagePathList = new ArrayList<ImagePath>();
++                imagePathMap.put(goodsid, currentImagePathList);
++            }
++            currentImagePathList.add(imagePath);
++        }
++        return imagePathMap;
++    }
++
++    private Set<Integer> getFavoriteGoodsIdSet(Integer userid, List<Integer> goodsIdList) {
++        Set<Integer> favoriteGoodsIdSet = new HashSet<Integer>();
++        if (userid == null || goodsIdList.isEmpty()) {
++            return favoriteGoodsIdSet;
++        }
++
++        FavoriteExample favoriteExample = new FavoriteExample();
++        favoriteExample.or().andUseridEqualTo(userid).andGoodsidIn(goodsIdList);
++        List<Favorite> favoriteList = favoriteMapper.selectByExample(favoriteExample);
++
++        for (Favorite favorite : favoriteList) {
++            favoriteGoodsIdSet.add(favorite.getGoodsid());
++        }
++        return favoriteGoodsIdSet;
++    }
+ }
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class
+deleted file mode 100644
+index 108377a..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/CustomerController.class and /dev/null differ

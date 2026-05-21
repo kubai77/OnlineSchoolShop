@@ -22,6 +22,8 @@ public interface GoodsService {
 
     public List<Goods> selectByExampleLimit(GoodsExample digGoodsExample);
 
+    public List<Goods> enrichGoodsList(List<Goods> goodsList, Integer userid);
+
     public void addFavorite(Favorite favorite);
 
     public Favorite selectFavByKey(FavoriteKey favoriteKey);

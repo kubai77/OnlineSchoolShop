@@ -1,7 +1,11 @@
 package com.zhang.ssmschoolshop.controller.front;
 
 
-import com.zhang.ssmschoolshop.entity.*;
+import com.zhang.ssmschoolshop.entity.Category;
+import com.zhang.ssmschoolshop.entity.CategoryExample;
+import com.zhang.ssmschoolshop.entity.Goods;
+import com.zhang.ssmschoolshop.entity.GoodsExample;
+import com.zhang.ssmschoolshop.entity.User;
 import com.zhang.ssmschoolshop.service.CateService;
 import com.zhang.ssmschoolshop.service.GoodsService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,30 +29,7 @@ public class MainController {
 
     @RequestMapping("/")
     public String showAdmin(Model model, HttpSession session) {
-        Integer userid;
-        User user = (User) session.getAttribute("user");
-        if (user == null) {
-            userid = null;
-        } else {
-            userid = user.getUserid();
-        }
-
-        //数码分类
-        List<Goods> digGoods = getCateGoods("数码", userid);
-        model.addAttribute("digGoods", digGoods);
-
-        //家电
-        List<Goods> houseGoods = getCateGoods("家电", userid);
-        model.addAttribute("houseGoods", houseGoods);
-
-        //服饰
-        List<Goods> colGoods = getCateGoods("服饰", userid);
-        model.addAttribute("colGoods", colGoods);
-
-        //书籍
-        List<Goods> bookGoods = getCateGoods("书籍", userid);
-        model.addAttribute("bookGoods", bookGoods);
-
+        loadMainGoods(model, session);
         return "main";
     }
 
@@ -57,35 +38,11 @@ public class MainController {
 
     @RequestMapping("/main")
     public String showAllGoods(Model model, HttpSession session) {
-        Integer userid;
-        User user = (User) session.getAttribute("user");
-        if (user == null) {
-            userid = null;
-        } else {
-            userid = user.getUserid();
-        }
-
-        //数码分类
-        List<Goods> digGoods = getCateGoods("数码", userid);
-        model.addAttribute("digGoods", digGoods);
-
-        //家电
-        List<Goods> houseGoods = getCateGoods("家电", userid);
-        model.addAttribute("houseGoods", houseGoods);
-
-        //服饰
-        List<Goods> colGoods = getCateGoods("服饰", userid);
-        model.addAttribute("colGoods", colGoods);
-
-        //书籍
-        List<Goods> bookGoods = getCateGoods("书籍", userid);
-        model.addAttribute("bookGoods", bookGoods);
-
+        loadMainGoods(model, session);
         return "main";
     }
 
     public List<Goods> getCateGoods(String cate, Integer userid) {
-        //查询分类
         CategoryExample digCategoryExample = new CategoryExample();
         digCategoryExample.or().andCatenameLike(cate);
         List<Category> digCategoryList = cateService.selectByExample(digCategoryExample);
@@ -94,7 +51,6 @@ public class MainController {
             return null;
         }
 
-        //查询属于刚查到的分类的商品
         GoodsExample digGoodsExample = new GoodsExample();
         List<Integer> digCateId = new ArrayList<Integer>();
         for (Category tmp:digCategoryList) {
@@ -103,26 +59,22 @@ public class MainController {
         digGoodsExample.or().andCategoryIn(digCateId);
 
         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
+        return goodsService.enrichGoodsList(goodsList, userid);
+    }
 
-        List<Goods> goodsAndImage = new ArrayList<>();
-        //获取每个商品的图片
-        for (Goods goods:goodsList) {
-            //判断是否为登录状态
-            if (userid == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
+    private void loadMainGoods(Model model, HttpSession session) {
+        Integer userid = getUserid(session);
+        model.addAttribute("digGoods", getCateGoods("数码", userid));
+        model.addAttribute("houseGoods", getCateGoods("家电", userid));
+        model.addAttribute("colGoods", getCateGoods("服饰", userid));
+        model.addAttribute("bookGoods", getCateGoods("书籍", userid));
+    }
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-            goods.setImagePaths(imagePathList);
-            goodsAndImage.add(goods);
+    private Integer getUserid(HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return null;
         }
-        return goodsAndImage;
+        return user.getUserid();
     }
 }

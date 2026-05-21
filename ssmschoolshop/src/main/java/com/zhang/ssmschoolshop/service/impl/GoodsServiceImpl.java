@@ -9,7 +9,13 @@ import com.zhang.ssmschoolshop.service.GoodsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service("goodsService")
 public class GoodsServiceImpl implements GoodsService {
@@ -69,6 +75,27 @@ public class GoodsServiceImpl implements GoodsService {
     }
 
     @Override
+    public List<Goods> enrichGoodsList(List<Goods> goodsList, Integer userid) {
+        if (goodsList == null || goodsList.isEmpty()) {
+            return goodsList;
+        }
+
+        List<Integer> goodsIdList = getGoodsIdList(goodsList);
+        Map<Integer, List<ImagePath>> imagePathMap = getImagePathMap(goodsIdList);
+        Set<Integer> favoriteGoodsIdSet = getFavoriteGoodsIdSet(userid, goodsIdList);
+
+        for (Goods goods : goodsList) {
+            List<ImagePath> imagePathList = imagePathMap.get(goods.getGoodsid());
+            if (imagePathList == null) {
+                imagePathList = new ArrayList<>();
+            }
+            goods.setImagePaths(imagePathList);
+            goods.setFav(favoriteGoodsIdSet.contains(goods.getGoodsid()));
+        }
+        return goodsList;
+    }
+
+    @Override
     public void addFavorite(Favorite favorite) {
         favoriteMapper.insertSelective(favorite);
     }
@@ -86,5 +113,53 @@ public class GoodsServiceImpl implements GoodsService {
     @Override
     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
         return favoriteMapper.selectByExample(favoriteExample);
+    }
+
+    private List<Integer> getGoodsIdList(List<Goods> goodsList) {
+        Set<Integer> goodsIdSet = new LinkedHashSet<Integer>();
+        for (Goods goods : goodsList) {
+            if (goods != null && goods.getGoodsid() != null) {
+                goodsIdSet.add(goods.getGoodsid());
+            }
+        }
+        return new ArrayList<Integer>(goodsIdSet);
+    }
+
+    private Map<Integer, List<ImagePath>> getImagePathMap(List<Integer> goodsIdList) {
+        Map<Integer, List<ImagePath>> imagePathMap = new HashMap<Integer, List<ImagePath>>();
+        if (goodsIdList.isEmpty()) {
+            return imagePathMap;
+        }
+
+        ImagePathExample imagePathExample = new ImagePathExample();
+        imagePathExample.or().andGoodidIn(goodsIdList);
+        List<ImagePath> imagePathList = imagePathMapper.selectByExample(imagePathExample);
+
+        for (ImagePath imagePath : imagePathList) {
+            Integer goodsid = imagePath.getGoodid();
+            List<ImagePath> currentImagePathList = imagePathMap.get(goodsid);
+            if (currentImagePathList == null) {
+                currentImagePathList = new ArrayList<ImagePath>();
+                imagePathMap.put(goodsid, currentImagePathList);
+            }
+            currentImagePathList.add(imagePath);
+        }
+        return imagePathMap;
+    }
+
+    private Set<Integer> getFavoriteGoodsIdSet(Integer userid, List<Integer> goodsIdList) {
+        Set<Integer> favoriteGoodsIdSet = new HashSet<Integer>();
+        if (userid == null || goodsIdList.isEmpty()) {
+            return favoriteGoodsIdSet;
+        }
+
+        FavoriteExample favoriteExample = new FavoriteExample();
+        favoriteExample.or().andUseridEqualTo(userid).andGoodsidIn(goodsIdList);
+        List<Favorite> favoriteList = favoriteMapper.selectByExample(favoriteExample);
+
+        for (Favorite favorite : favoriteList) {
+            favoriteGoodsIdSet.add(favorite.getGoodsid());
+        }
+        return favoriteGoodsIdSet;
     }
 }

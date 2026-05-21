@@ -239,7 +239,6 @@ public class CustomerController {
             return "redirect:/login";
         }
 
-        //一页显示几个数据
         PageHelper.startPage(pn, 16);
 
         FavoriteExample favoriteExample = new FavoriteExample();
@@ -252,27 +251,13 @@ public class CustomerController {
         }
 
         GoodsExample goodsExample = new GoodsExample();
-        List<Goods> goodsList = new ArrayList<>();
+        List<Goods> goodsList = new ArrayList<Goods>();
         if (!goodsIdList.isEmpty()) {
             goodsExample.or().andGoodsidIn(goodsIdList);
             goodsList = goodsService.selectByExample(goodsExample);
+            goodsService.enrichGoodsList(goodsList, user.getUserid());
         }
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            goods.setFav(true);
-
-            goodsList.set(i, goods);
-        }
-
-        //显示几个页号
         PageInfo page = new PageInfo(goodsList,5);
         model.addAttribute("pageInfo", page);
 
