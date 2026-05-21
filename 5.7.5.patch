@@ -1,0 +1,156 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9fe5a50..491a3b6 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -100,29 +100,7 @@ public class OrderController {
+     @ResponseBody
+     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
+         User user = (User) session.getAttribute("user");
+-
+-        //获取订单信息
+-        ShopCartExample shopCartExample = new ShopCartExample();
+-        shopCartExample.or().andUseridEqualTo(user.getUserid());
+-        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+-
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(),cart.getGoodsid()));
+-        }
+-
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
+-        }
+-
+-        return Msg.success("购买成功");
++        return orderService.processOrder(user.getUserid(), oldPrice, newPrice, isPay, addressid);
+     }
+ 
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..faae981 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -29,4 +29,6 @@ public interface GoodsService {
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
++
++    void reduceStock(Integer goodsId, Integer quantity);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..0187ff6 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -1,8 +1,7 @@
+ package com.zhang.ssmschoolshop.service;
+ 
+-
+-
+ import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.util.Msg;
+ 
+ import java.util.List;
+ 
+@@ -24,4 +23,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++
++    Msg processOrder(Integer userId, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..1e448d2 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -87,4 +87,11 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    @Override
++    public void reduceStock(Integer goodsId, Integer quantity) {
++        Goods goods = goodsMapper.selectByPrimaryKey(goodsId);
++        goods.setNum(goods.getNum() - quantity);
++        goodsMapper.updateByPrimaryKeySelective(goods);
++    }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..71bc078 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -5,10 +5,15 @@ import com.zhang.ssmschoolshop.dao.AddressMapper;
+ import com.zhang.ssmschoolshop.dao.OrderItemMapper;
+ import com.zhang.ssmschoolshop.dao.OrderMapper;
+ import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.service.GoodsService;
+ import com.zhang.ssmschoolshop.service.OrderService;
++import com.zhang.ssmschoolshop.service.ShopCartService;
++import com.zhang.ssmschoolshop.util.Msg;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
+ 
++import java.util.Date;
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -23,6 +28,12 @@ public class OrderServiceImpl implements OrderService {
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
+ 
++    @Autowired
++    private GoodsService goodsService;
++
++    @Autowired
++    private ShopCartService shopCartService;
++
+     @Override
+     public void insertOrder(Order order) {
+         orderMapper.insertSelective(order);
+@@ -63,4 +74,39 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    @Transactional
++    public Msg processOrder(Integer userId, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid) {
++        // fetch cart items
++        ShopCartExample shopCartExample = new ShopCartExample();
++        shopCartExample.or().andUseridEqualTo(userId);
++        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
++
++        if (shopCart == null || shopCart.isEmpty()) {
++            return Msg.fail("购物车为空");
++        }
++
++        // check stock for each item
++        for (ShopCart cart : shopCart) {
++            Goods goods = goodsService.selectById(cart.getGoodsid());
++            if (goods == null || goods.getNum() < cart.getGoodsnum()) {
++                return Msg.fail("商品【" + (goods == null ? cart.getGoodsid() : goods.getGoodsname()) + "】库存不足");
++            }
++        }
++
++        // insert order
++        Order order = new Order(null, userId, new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
++        orderMapper.insertSelective(order);
++        Integer orderId = order.getOrderid();
++
++        // deduct stock, insert order items, clear cart
++        for (ShopCart cart : shopCart) {
++            goodsService.reduceStock(cart.getGoodsid(), cart.getGoodsnum());
++            orderItemMapper.insertSelective(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        }
++
++        return Msg.success("购买成功");
++    }
+ }

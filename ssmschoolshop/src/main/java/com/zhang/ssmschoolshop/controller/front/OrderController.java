@@ -100,29 +100,7 @@ public class OrderController {
     @ResponseBody
     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
         User user = (User) session.getAttribute("user");
-
-        //获取订单信息
-        ShopCartExample shopCartExample = new ShopCartExample();
-        shopCartExample.or().andUseridEqualTo(user.getUserid());
-        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
-
-        //删除购物车
-        for (ShopCart cart : shopCart) {
-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(),cart.getGoodsid()));
-        }
-
-        //把订单信息写入数据库
-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
-        orderService.insertOrder(order);
-        //插入的订单号
-        Integer orderId = order.getOrderid();
-
-        //把订单项写入orderitem表中
-        for (ShopCart cart : shopCart) {
-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
-        }
-
-        return Msg.success("购买成功");
+        return orderService.processOrder(user.getUserid(), oldPrice, newPrice, isPay, addressid);
     }
 
 }

@@ -87,4 +87,11 @@ public class GoodsServiceImpl implements GoodsService {
     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
         return favoriteMapper.selectByExample(favoriteExample);
     }
+
+    @Override
+    public void reduceStock(Integer goodsId, Integer quantity) {
+        Goods goods = goodsMapper.selectByPrimaryKey(goodsId);
+        goods.setNum(goods.getNum() - quantity);
+        goodsMapper.updateByPrimaryKeySelective(goods);
+    }
 }
