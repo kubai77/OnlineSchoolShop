@@ -1,0 +1,233 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..c759220 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -130,24 +130,16 @@ public class OrderController {
+         shopCartExample.or().andUseridEqualTo(user.getUserid());
+         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+ 
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
+-        }
+-
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        try {
++            //把订单信息写入数据库
++            Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
++            orderService.placeOrder(shopCart, order);
++            // 购买成功通知管理员
++            // emailService.sendEmailToAdmin();
++            return Msg.success("购买成功");
++        } catch (RuntimeException e) {
++            return Msg.fail(e.getMessage());
+         }
+-        // 购买成功通知管理员
+-       // emailService.sendEmailToAdmin();
+-        return Msg.success("购买成功");
+     }
+ 
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..307072d 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -24,4 +24,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++
++    void placeOrder(List<ShopCart> shopCartList, Order order);
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..2094453 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -9,6 +9,10 @@ import com.zhang.ssmschoolshop.service.OrderService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
++import com.zhang.ssmschoolshop.dao.ShopCartMapper;
++import com.zhang.ssmschoolshop.dao.GoodsMapper;
++import org.springframework.transaction.annotation.Transactional;
++
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -23,6 +27,12 @@ public class OrderServiceImpl implements OrderService {
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
+ 
++    @Autowired(required = false)
++    private ShopCartMapper shopCartMapper;
++
++    @Autowired(required = false)
++    private GoodsMapper goodsMapper;
++
+     @Override
+     public void insertOrder(Order order) {
+         orderMapper.insertSelective(order);
+@@ -63,4 +73,34 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    @Transactional(rollbackFor = Exception.class)
++    public void placeOrder(List<ShopCart> shopCartList, Order order) {
++        // 1. 检查库存并扣减
++        for (ShopCart cart : shopCartList) {
++            Goods goods = goodsMapper.selectByPrimaryKey(cart.getGoodsid());
++            if (goods == null) {
++                throw new RuntimeException("商品不存在");
++            }
++            if (goods.getNum() < cart.getGoodsnum()) {
++                throw new RuntimeException("商品 " + goods.getGoodsname() + " 库存不足");
++            }
++            // 扣减库存
++            goods.setNum(goods.getNum() - cart.getGoodsnum());
++            goodsMapper.updateByPrimaryKeySelective(goods);
++            
++            // 清理购物车
++            shopCartMapper.deleteByPrimaryKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        }
++
++        // 2. 插入订单
++        orderMapper.insertSelective(order);
++        Integer orderId = order.getOrderid();
++
++        // 3. 插入订单项
++        for (ShopCart cart : shopCartList) {
++            orderItemMapper.insertSelective(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        }
++    }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9fe5a50..8c7a0e7 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -106,23 +106,14 @@ public class OrderController {
+         shopCartExample.or().andUseridEqualTo(user.getUserid());
+         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+ 
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(),cart.getGoodsid()));
++        try {
++            //把订单信息写入数据库
++            Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
++            orderService.placeOrder(shopCart, order);
++            return Msg.success("购买成功");
++        } catch (RuntimeException e) {
++            return Msg.fail(e.getMessage());
+         }
+-
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
+-        }
+-
+-        return Msg.success("购买成功");
+     }
+ 
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..307072d 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -24,4 +24,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++
++    void placeOrder(List<ShopCart> shopCartList, Order order);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..2094453 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -9,6 +9,10 @@ import com.zhang.ssmschoolshop.service.OrderService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
++import com.zhang.ssmschoolshop.dao.ShopCartMapper;
++import com.zhang.ssmschoolshop.dao.GoodsMapper;
++import org.springframework.transaction.annotation.Transactional;
++
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -23,6 +27,12 @@ public class OrderServiceImpl implements OrderService {
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
+ 
++    @Autowired(required = false)
++    private ShopCartMapper shopCartMapper;
++
++    @Autowired(required = false)
++    private GoodsMapper goodsMapper;
++
+     @Override
+     public void insertOrder(Order order) {
+         orderMapper.insertSelective(order);
+@@ -63,4 +73,34 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    @Transactional(rollbackFor = Exception.class)
++    public void placeOrder(List<ShopCart> shopCartList, Order order) {
++        // 1. 检查库存并扣减
++        for (ShopCart cart : shopCartList) {
++            Goods goods = goodsMapper.selectByPrimaryKey(cart.getGoodsid());
++            if (goods == null) {
++                throw new RuntimeException("商品不存在");
++            }
++            if (goods.getNum() < cart.getGoodsnum()) {
++                throw new RuntimeException("商品 " + goods.getGoodsname() + " 库存不足");
++            }
++            // 扣减库存
++            goods.setNum(goods.getNum() - cart.getGoodsnum());
++            goodsMapper.updateByPrimaryKeySelective(goods);
++            
++            // 清理购物车
++            shopCartMapper.deleteByPrimaryKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        }
++
++        // 2. 插入订单
++        orderMapper.insertSelective(order);
++        Integer orderId = order.getOrderid();
++
++        // 3. 插入订单项
++        for (ShopCart cart : shopCartList) {
++            orderItemMapper.insertSelective(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        }
++    }
+ }
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class
+deleted file mode 100644
+index 51a0d1c..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/controller/front/OrderController.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class
+deleted file mode 100644
+index 77b7db1..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/OrderService.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class
+deleted file mode 100644
+index c4d6186..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.class and /dev/null differ

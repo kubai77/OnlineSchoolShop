@@ -106,23 +106,14 @@ public class OrderController {
         shopCartExample.or().andUseridEqualTo(user.getUserid());
         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
 
-        //删除购物车
-        for (ShopCart cart : shopCart) {
-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(),cart.getGoodsid()));
+        try {
+            //把订单信息写入数据库
+            Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
+            orderService.placeOrder(shopCart, order);
+            return Msg.success("购买成功");
+        } catch (RuntimeException e) {
+            return Msg.fail(e.getMessage());
         }
-
-        //把订单信息写入数据库
-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
-        orderService.insertOrder(order);
-        //插入的订单号
-        Integer orderId = order.getOrderid();
-
-        //把订单项写入orderitem表中
-        for (ShopCart cart : shopCart) {
-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
-        }
-
-        return Msg.success("购买成功");
     }
 
 }

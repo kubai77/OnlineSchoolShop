@@ -24,4 +24,6 @@ public interface OrderService {
     public Order selectByPrimaryKey(Integer orderid);
 
     void insertOrderItem(OrderItem orderItem);
+
+    void placeOrder(List<ShopCart> shopCartList, Order order);
 }
