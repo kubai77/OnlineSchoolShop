@@ -87,4 +87,20 @@ public class GoodsServiceImpl implements GoodsService {
     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
         return favoriteMapper.selectByExample(favoriteExample);
     }
+
+    @Override
+    public List<ImagePath> findImagePathByGoodsIds(List<Integer> goodsIds) {
+        if (goodsIds == null || goodsIds.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return imagePathMapper.selectByGoodIds(goodsIds);
+    }
+
+    @Override
+    public List<Favorite> selectFavByUserIdAndGoodsIds(Integer userid, List<Integer> goodsIds) {
+        if (userid == null || goodsIds == null || goodsIds.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return favoriteMapper.selectByUserIdAndGoodsIds(userid, goodsIds);
+    }
 }

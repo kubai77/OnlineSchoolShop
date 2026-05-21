@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Controller
 public class FrontGoodsController {
@@ -85,12 +86,26 @@ public class FrontGoodsController {
         CommentExample commentExample=new CommentExample();
         commentExample.or().andGoodsidEqualTo(goods.getGoodsid());
         List<Comment> commentList=commentService.selectByExample(commentExample);
-        for (Integer i=0;i<commentList.size();i++)
-        {
-            Comment comment=commentList.get(i);
-            User commentUser=userService.selectByPrimaryKey(comment.getUserid());
-            comment.setUserName(commentUser.getUsername());
-            commentList.set(i,comment);
+
+        // 批量查询评论用户，避免 N+1
+        if (!commentList.isEmpty()) {
+            List<Integer> userIds = new ArrayList<>();
+            for (Comment comment : commentList) {
+                if (comment.getUserid() != null && !userIds.contains(comment.getUserid())) {
+                    userIds.add(comment.getUserid());
+                }
+            }
+            Map<Integer, String> userMap = new HashMap<>();
+            if (!userIds.isEmpty()) {
+                List<User> users = userService.selectByPrimaryKeys(userIds);
+                for (User u : users) {
+                    userMap.put(u.getUserid(), u.getUsername());
+                }
+            }
+            for (Comment comment : commentList) {
+                String username = userMap.get(comment.getUserid());
+                comment.setUserName(username != null ? username : "");
+            }
         }
         model.addAttribute("commentList",commentList);
 
@@ -109,29 +124,31 @@ public class FrontGoodsController {
         goodsExample.or().andGoodsnameLike("%" + keyword + "%");
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        if (goodsList != null && !goodsList.isEmpty()) {
+            // 批量查询图片
+            List<Integer> goodsIds = new ArrayList<>();
+            for (Goods goods : goodsList) {
+                goodsIds.add(goods.getGoodsid());
+            }
+            List<ImagePath> allImages = goodsService.findImagePathByGoodsIds(goodsIds);
+            Map<Integer, List<ImagePath>> imageMap = allImages.stream()
+                    .collect(Collectors.groupingBy(ImagePath::getGoodid));
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
+            // 批量查询收藏态
+            Set<Integer> favGoodsIds = new HashSet<>();
+            if (user != null) {
+                List<Favorite> favList = goodsService.selectFavByUserIdAndGoodsIds(user.getUserid(), goodsIds);
+                favGoodsIds = favList.stream()
+                        .map(Favorite::getGoodsid)
+                        .collect(Collectors.toSet());
             }
 
-            goodsList.set(i, goods);
+            // 组装数据
+            for (Goods goods : goodsList) {
+                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), Collections.emptyList()));
+                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+            }
         }
-
 
         //显示几个页号
         PageInfo page = new PageInfo(goodsList,5);
@@ -201,29 +218,31 @@ public class FrontGoodsController {
         }
         List<Goods> goodsList = goodsService.selectByExample(goodsExample);
 
-        //获取图片地址
-        for (int i = 0; i < goodsList.size(); i++) {
-            Goods goods = goodsList.get(i);
+        if (goodsList != null && !goodsList.isEmpty()) {
+            // 批量查询图片
+            List<Integer> goodsIds = new ArrayList<>();
+            for (Goods goods : goodsList) {
+                goodsIds.add(goods.getGoodsid());
+            }
+            List<ImagePath> allImages = goodsService.findImagePathByGoodsIds(goodsIds);
+            Map<Integer, List<ImagePath>> imageMap = allImages.stream()
+                    .collect(Collectors.groupingBy(ImagePath::getGoodid));
 
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-
-            goods.setImagePaths(imagePathList);
-
-            //判断是否收藏
-            if (user == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(user.getUserid(), goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
+            // 批量查询收藏态
+            Set<Integer> favGoodsIds = new HashSet<>();
+            if (user != null) {
+                List<Favorite> favList = goodsService.selectFavByUserIdAndGoodsIds(user.getUserid(), goodsIds);
+                favGoodsIds = favList.stream()
+                        .map(Favorite::getGoodsid)
+                        .collect(Collectors.toSet());
             }
 
-            goodsList.set(i, goods);
+            // 组装数据
+            for (Goods goods : goodsList) {
+                goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), Collections.emptyList()));
+                goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+            }
         }
-
 
         //显示几个页号
         PageInfo page = new PageInfo(goodsList,5);

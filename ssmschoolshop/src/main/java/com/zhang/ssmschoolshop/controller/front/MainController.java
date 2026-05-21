@@ -10,8 +10,8 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import javax.servlet.http.HttpSession;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Controller
 public class MainController {
@@ -104,25 +104,33 @@ public class MainController {
 
         List<Goods> goodsList = goodsService.selectByExampleLimit(digGoodsExample);
 
-        List<Goods> goodsAndImage = new ArrayList<>();
-        //获取每个商品的图片
-        for (Goods goods:goodsList) {
-            //判断是否为登录状态
-            if (userid == null) {
-                goods.setFav(false);
-            } else {
-                Favorite favorite = goodsService.selectFavByKey(new FavoriteKey(userid, goods.getGoodsid()));
-                if (favorite == null) {
-                    goods.setFav(false);
-                } else {
-                    goods.setFav(true);
-                }
-            }
-
-            List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
-            goods.setImagePaths(imagePathList);
-            goodsAndImage.add(goods);
+        if (goodsList == null || goodsList.isEmpty()) {
+            return goodsList;
         }
-        return goodsAndImage;
+
+        // 批量查询图片
+        List<Integer> goodsIds = goodsList.stream()
+                .map(Goods::getGoodsid)
+                .collect(Collectors.toList());
+        List<ImagePath> allImages = goodsService.findImagePathByGoodsIds(goodsIds);
+        Map<Integer, List<ImagePath>> imageMap = allImages.stream()
+                .collect(Collectors.groupingBy(ImagePath::getGoodid));
+
+        // 批量查询收藏态
+        Set<Integer> favGoodsIds = new HashSet<>();
+        if (userid != null) {
+            List<Favorite> favList = goodsService.selectFavByUserIdAndGoodsIds(userid, goodsIds);
+            favGoodsIds = favList.stream()
+                    .map(Favorite::getGoodsid)
+                    .collect(Collectors.toSet());
+        }
+
+        // 组装数据
+        for (Goods goods : goodsList) {
+            goods.setImagePaths(imageMap.getOrDefault(goods.getGoodsid(), Collections.emptyList()));
+            goods.setFav(favGoodsIds.contains(goods.getGoodsid()));
+        }
+
+        return goodsList;
     }
 }

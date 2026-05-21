@@ -17,4 +17,5 @@ public interface UserService {
 
     public void updateByPrimaryKeySelective(User user);
 
+    public List<User> selectByPrimaryKeys(List<Integer> userids);
 }

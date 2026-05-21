@@ -30,4 +30,6 @@ public interface FavoriteMapper {
     int updateByPrimaryKeySelective(Favorite record);
 
     int updateByPrimaryKey(Favorite record);
+
+    List<Favorite> selectByUserIdAndGoodsIds(@Param("userid") Integer userid, @Param("goodsIds") List<Integer> goodsIds);
 }

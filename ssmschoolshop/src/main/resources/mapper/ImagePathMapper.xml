@@ -178,4 +178,13 @@
       path = #{path,jdbcType=VARCHAR}
     where pathId = #{pathid,jdbcType=INTEGER}
   </update>
+  <select id="selectByGoodIds" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from imagepath
+    where goodId in
+    <foreach collection="goodIds" item="goodId" open="(" separator="," close=")">
+      #{goodId}
+    </foreach>
+  </select>
 </mapper>

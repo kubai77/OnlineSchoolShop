@@ -225,4 +225,13 @@
       telephone = #{telephone,jdbcType=VARCHAR}
     where userId = #{userid,jdbcType=INTEGER}
   </update>
+  <select id="selectByPrimaryKeys" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from user
+    where userId in
+    <foreach collection="userids" item="userid" open="(" separator="," close=")">
+      #{userid}
+    </foreach>
+  </select>
 </mapper>
