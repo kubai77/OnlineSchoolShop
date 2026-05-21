@@ -1,0 +1,301 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..14d0584 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -7,17 +7,13 @@ import com.zhang.ssmschoolshop.util.Msg;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.mail.MailException;
+-import org.springframework.mail.SimpleMailMessage;
+ import org.springframework.stereotype.Controller;
+ import org.springframework.ui.Model;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.ResponseBody;
+ 
+ import javax.servlet.http.HttpSession;
+-import java.time.LocalDate;
+ import java.util.ArrayList;
+-import java.util.Date;
+ import java.util.List;
+ 
+ 
+@@ -42,9 +38,6 @@ public class OrderController {
+     @Autowired
+     private ActivityService activityService;
+ 
+-    @Autowired
+-    private EmailService emailService;
+-
+     @RequestMapping("/order")
+     public String showOrder(HttpSession session, Model model) {
+ 
+@@ -53,39 +46,31 @@ public class OrderController {
+             return "redirect:/login";
+         }
+ 
+-        //查询当前用户的收货地址
+         AddressExample addressExample = new AddressExample();
+         addressExample.or().andUseridEqualTo(user.getUserid());
+         List<Address> addressList = addressService.getAllAddressByExample(addressExample);
+ 
+         model.addAttribute("address", addressList);
+ 
+-        //订单信息
+-        //获取当前用户的购物车信息
+         ShopCartExample shopCartExample = new ShopCartExample();
+         shopCartExample.or().andUseridEqualTo(user.getUserid());
+         List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+ 
+-        //获取购物车中的商品信息
+         List<Goods> goodsAndImage = new ArrayList<>();
+ 
+-        Float totalPrice = new Float(0);
++        Float totalPrice = 0F;
+         Integer oldTotalPrice = 0;
+ 
+         for (ShopCart cart : shopCart) {
+-            //分别从购物车列表中获取每个商品
+             Goods goods = goodsService.selectById(cart.getGoodsid());
+ 
+             List<ImagePath> imagePathList = goodsService.findImagePath(goods.getGoodsid());
+             goods.setImagePaths(imagePathList);
+             goods.setNum(cart.getGoodsnum());
+ 
+-            //活动信息
+             Activity activity = activityService.selectByKey(goods.getActivityid());
+             goods.setActivity(activity);
+ 
+-            //处理折扣信息
+-            //如果商品折扣不为1
+             if (activity.getDiscount() != 1) {
+                 goods.setNewPrice(goods.getPrice() * goods.getNum() * activity.getDiscount());
+                 System.out.println("价格为：" + goods.getPrice() * goods.getNum() * activity.getDiscount());
+@@ -124,30 +109,20 @@ public class OrderController {
+     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
+ 
+         User user = (User) session.getAttribute("user");
+-
+-        //获取订单信息
+-        ShopCartExample shopCartExample = new ShopCartExample();
+-        shopCartExample.or().andUseridEqualTo(user.getUserid());
+-        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+-
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        if (user == null) {
++            return Msg.fail("请先登录");
+         }
+ 
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        try {
++            orderService.createOrderFromCart(user.getUserid(), oldPrice, newPrice, isPay, addressid);
++            return Msg.success("购买成功");
++        } catch (IllegalStateException e) {
++            log.warn("下单失败，userId={}, reason={}", user.getUserid(), e.getMessage());
++            return Msg.fail(e.getMessage());
++        } catch (Exception e) {
++            log.error("下单失败，userId=" + user.getUserid(), e);
++            return Msg.fail("下单失败，请稍后重试");
+         }
+-        // 购买成功通知管理员
+-       // emailService.sendEmailToAdmin();
+-        return Msg.success("购买成功");
+     }
+ 
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+index 34fb677..fb7c959 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+@@ -1,6 +1,7 @@
+ package com.zhang.ssmschoolshop.dao;
+ 
+ import org.apache.ibatis.annotations.Param;
++import org.apache.ibatis.annotations.Update;
+ import com.zhang.ssmschoolshop.entity.Goods;
+ import com.zhang.ssmschoolshop.entity.GoodsExample;
+ 
+@@ -36,4 +37,7 @@ public interface GoodsMapper {
+     int updateByPrimaryKey(Goods record);
+ 
+     List<Goods> selectByExampleWithBLOBsLimit(GoodsExample digGoodsExample);
+-}
+\ No newline at end of file
++
++    @Update("update goods set num = num - #{deductNum} where goodsId = #{goodsid} and num >= #{deductNum}")
++    int reduceStock(@Param("goodsid") Integer goodsid, @Param("deductNum") Integer deductNum);
++}
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..740da16 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -29,4 +29,6 @@ public interface GoodsService {
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
++
++    public int reduceStock(Integer goodsid, Integer deductNum);
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..dc7fb57 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -24,4 +24,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++
++    void createOrderFromCart(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..211631f 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -87,4 +87,9 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    @Override
++    public int reduceStock(Integer goodsid, Integer deductNum) {
++        return goodsMapper.reduceStock(goodsid, deductNum);
++    }
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..d213107 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -4,11 +4,15 @@ package com.zhang.ssmschoolshop.service.impl;
+ import com.zhang.ssmschoolshop.dao.AddressMapper;
+ import com.zhang.ssmschoolshop.dao.OrderItemMapper;
+ import com.zhang.ssmschoolshop.dao.OrderMapper;
++import com.zhang.ssmschoolshop.dao.ShopCartMapper;
+ import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.service.GoodsService;
+ import com.zhang.ssmschoolshop.service.OrderService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
+ 
++import java.util.Date;
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -23,6 +27,12 @@ public class OrderServiceImpl implements OrderService {
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
+ 
++    @Autowired(required = false)
++    private ShopCartMapper shopCartMapper;
++
++    @Autowired
++    private GoodsService goodsService;
++
+     @Override
+     public void insertOrder(Order order) {
+         orderMapper.insertSelective(order);
+@@ -63,4 +73,55 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    @Transactional(rollbackFor = Exception.class)
++    public void createOrderFromCart(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid) {
++        ShopCartExample shopCartExample = new ShopCartExample();
++        shopCartExample.or().andUseridEqualTo(userid);
++        List<ShopCart> shopCartList = shopCartMapper.selectByExample(shopCartExample);
++        if (shopCartList == null || shopCartList.isEmpty()) {
++            throw new IllegalStateException("购物车为空，无法下单");
++        }
++
++        for (ShopCart cart : shopCartList) {
++            validateStock(cart);
++        }
++
++        Order order = new Order(null, userid, new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
++        orderMapper.insertSelective(order);
++        Integer orderId = order.getOrderid();
++
++        for (ShopCart cart : shopCartList) {
++            int updatedRows = goodsService.reduceStock(cart.getGoodsid(), cart.getGoodsnum());
++            if (updatedRows == 0) {
++                throw buildStockException(cart.getGoodsid());
++            }
++            orderItemMapper.insertSelective(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        }
++
++        for (ShopCart cart : shopCartList) {
++            shopCartMapper.deleteByPrimaryKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        }
++    }
++
++    private void validateStock(ShopCart cart) {
++        Goods goods = goodsService.selectById(cart.getGoodsid());
++        if (goods == null) {
++            throw new IllegalStateException("商品不存在，无法完成下单");
++        }
++        Integer stock = goods.getNum() == null ? 0 : goods.getNum();
++        if (stock < cart.getGoodsnum()) {
++            throw new IllegalStateException(goods.getGoodsname() + "库存不足，当前库存仅剩" + stock + "件");
++        }
++    }
++
++    private IllegalStateException buildStockException(Integer goodsid) {
++        Goods goods = goodsService.selectById(goodsid);
++        if (goods == null) {
++            return new IllegalStateException("商品不存在，无法完成下单");
++        }
++        Integer stock = goods.getNum() == null ? 0 : goods.getNum();
++        return new IllegalStateException(goods.getGoodsname() + "库存不足，当前库存仅剩" + stock + "件");
++    }
+ }
+diff --git a/SpringbootSchoolShop/src/main/webapp/js/order.js b/SpringbootSchoolShop/src/main/webapp/js/order.js
+index bc6e5b8..faebe05 100644
+--- a/SpringbootSchoolShop/src/main/webapp/js/order.js
++++ b/SpringbootSchoolShop/src/main/webapp/js/order.js
+@@ -1,9 +1,8 @@
+ 
+ $(document).ready(function () {
+     $("#confirm-orders").click(function () {
+-        // alert("safd");
+-        var selectAddr =  $('input:radio[name="addressid"]:checked').val();
+-        if(selectAddr == null) {
++        var selectAddr = $('input:radio[name="addressid"]:checked').val();
++        if (selectAddr == null) {
+             swal("请先添加地址");
+             return;
+         }
+@@ -19,13 +18,17 @@ $(document).ready(function () {
+                 isPay: isPay,
+                 addressid: selectAddr
+             },
+-            success: function () {
+-                swal("购买成功", "", "success");
+-                location.href = "/shop/info/list"
++            success: function (result) {
++                if (result.code === 100) {
++                    swal(result.msg, "", "success");
++                    location.href = "/shop/info/list";
++                    return;
++                }
++                swal(result.msg || "购买失败", "", "warning");
+             },
+             error: function () {
+                 swal("购买失败，无法连接到服务器！");
+             }
+         });
+     });
+-});
+\ No newline at end of file
++});

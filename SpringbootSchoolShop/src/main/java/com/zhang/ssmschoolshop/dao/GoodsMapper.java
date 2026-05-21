@@ -1,6 +1,7 @@
 package com.zhang.ssmschoolshop.dao;
 
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 import com.zhang.ssmschoolshop.entity.Goods;
 import com.zhang.ssmschoolshop.entity.GoodsExample;
 
@@ -36,4 +37,7 @@ public interface GoodsMapper {
     int updateByPrimaryKey(Goods record);
 
     List<Goods> selectByExampleWithBLOBsLimit(GoodsExample digGoodsExample);
+
+    @Update("update goods set num = num - #{deductNum} where goodsId = #{goodsid} and num >= #{deductNum}")
+    int reduceStock(@Param("goodsid") Integer goodsid, @Param("deductNum") Integer deductNum);
 }

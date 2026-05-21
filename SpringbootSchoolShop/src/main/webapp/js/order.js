@@ -1,9 +1,8 @@
 
 $(document).ready(function () {
     $("#confirm-orders").click(function () {
-        // alert("safd");
-        var selectAddr =  $('input:radio[name="addressid"]:checked').val();
-        if(selectAddr == null) {
+        var selectAddr = $('input:radio[name="addressid"]:checked').val();
+        if (selectAddr == null) {
             swal("请先添加地址");
             return;
         }
@@ -19,9 +18,13 @@ $(document).ready(function () {
                 isPay: isPay,
                 addressid: selectAddr
             },
-            success: function () {
-                swal("购买成功", "", "success");
-                location.href = "/shop/info/list"
+            success: function (result) {
+                if (result.code === 100) {
+                    swal(result.msg, "", "success");
+                    location.href = "/shop/info/list";
+                    return;
+                }
+                swal(result.msg || "购买失败", "", "warning");
             },
             error: function () {
                 swal("购买失败，无法连接到服务器！");

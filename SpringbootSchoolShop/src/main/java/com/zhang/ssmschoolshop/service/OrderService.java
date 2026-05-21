@@ -24,4 +24,6 @@ public interface OrderService {
     public Order selectByPrimaryKey(Integer orderid);
 
     void insertOrderItem(OrderItem orderItem);
+
+    void createOrderFromCart(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
 }
