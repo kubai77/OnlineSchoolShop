@@ -1,7 +1,6 @@
 package com.zhang.ssmschoolshop.service;
 
 
-
 import com.zhang.ssmschoolshop.entity.*;
 
 import java.util.List;
@@ -24,4 +23,6 @@ public interface OrderService {
     public Order selectByPrimaryKey(Integer orderid);
 
     void insertOrderItem(OrderItem orderItem);
+    
+    Order createOrder(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
 }

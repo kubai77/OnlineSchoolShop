@@ -9,11 +9,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.mail.MailException;
 import org.springframework.mail.MailSender;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
 @SpringBootApplication
 @EnableSwagger2
 @MapperScan("com.zhang.ssmschoolshop.dao")
+@EnableTransactionManagement
 public class SpringbootSchoolShopApplication extends SpringBootServletInitializer {
 
     @Override

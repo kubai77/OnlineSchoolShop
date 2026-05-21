@@ -1,0 +1,222 @@
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
+index b7cb8d1..70fbff5 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/SpringbootSchoolShopApplication.java
+@@ -9,11 +9,13 @@ import org.springframework.context.annotation.Bean;
+ import org.springframework.mail.MailException;
+ import org.springframework.mail.MailSender;
+ import org.springframework.mail.SimpleMailMessage;
++import org.springframework.transaction.annotation.EnableTransactionManagement;
+ import springfox.documentation.swagger2.annotations.EnableSwagger2;
+ 
+ @SpringBootApplication
+ @EnableSwagger2
+ @MapperScan("com.zhang.ssmschoolshop.dao")
++@EnableTransactionManagement
+ public class SpringbootSchoolShopApplication extends SpringBootServletInitializer {
+ 
+     @Override
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9dec6d0..e710b4c 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -122,32 +122,20 @@ public class OrderController {
+     @RequestMapping("/orderFinish")
+     @ResponseBody
+     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
+-
+         User user = (User) session.getAttribute("user");
+-
+-        //获取订单信息
+-        ShopCartExample shopCartExample = new ShopCartExample();
+-        shopCartExample.or().andUseridEqualTo(user.getUserid());
+-        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+-
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        if (user == null) {
++            return Msg.fail("请先登录");
+         }
+-
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        
++        try {
++            orderService.createOrder(user.getUserid(), oldPrice, newPrice, isPay, addressid);
++            return Msg.success("购买成功");
++        } catch (RuntimeException e) {
++            return Msg.fail(e.getMessage());
++        } catch (Exception e) {
++            log.error("创建订单失败", e);
++            return Msg.fail("创建订单失败，请稍后重试");
+         }
+-        // 购买成功通知管理员
+-       // emailService.sendEmailToAdmin();
+-        return Msg.success("购买成功");
+     }
+ 
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+index 34fb677..077bedb 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+@@ -36,4 +36,6 @@ public interface GoodsMapper {
+     int updateByPrimaryKey(Goods record);
+ 
+     List<Goods> selectByExampleWithBLOBsLimit(GoodsExample digGoodsExample);
++    
++    int decreaseStock(@Param("goodsid") Integer goodsid, @Param("num") Integer num);
+ }
+\ No newline at end of file
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..728b2e0 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -29,4 +29,6 @@ public interface GoodsService {
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
++    
++    public boolean decreaseStock(Integer goodsid, Integer num);
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..e6eb6e6 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -1,7 +1,6 @@
+ package com.zhang.ssmschoolshop.service;
+ 
+ 
+-
+ import com.zhang.ssmschoolshop.entity.*;
+ 
+ import java.util.List;
+@@ -24,4 +23,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++    
++    Order createOrder(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..4728a33 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -87,4 +87,10 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    @Override
++    public boolean decreaseStock(Integer goodsid, Integer num) {
++        int result = goodsMapper.decreaseStock(goodsid, num);
++        return result > 0;
++    }
+ }
+diff --git a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..a16ed95 100644
+--- a/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/SpringbootSchoolShop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -4,11 +4,16 @@ package com.zhang.ssmschoolshop.service.impl;
+ import com.zhang.ssmschoolshop.dao.AddressMapper;
+ import com.zhang.ssmschoolshop.dao.OrderItemMapper;
+ import com.zhang.ssmschoolshop.dao.OrderMapper;
++import com.zhang.ssmschoolshop.dao.ShopCartMapper;
+ import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.service.GoodsService;
+ import com.zhang.ssmschoolshop.service.OrderService;
++import com.zhang.ssmschoolshop.service.ShopCartService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
+ 
++import java.util.Date;
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -22,6 +27,15 @@ public class OrderServiceImpl implements OrderService {
+ 
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
++    
++    @Autowired(required = false)
++    private ShopCartMapper shopCartMapper;
++    
++    @Autowired
++    private GoodsService goodsService;
++    
++    @Autowired
++    private ShopCartService shopCartService;
+ 
+     @Override
+     public void insertOrder(Order order) {
+@@ -63,4 +77,45 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    @Transactional(rollbackFor = Exception.class)
++    public Order createOrder(Integer userid, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid) {
++        ShopCartExample shopCartExample = new ShopCartExample();
++        shopCartExample.or().andUseridEqualTo(userid);
++        List<ShopCart> shopCartList = shopCartService.selectByExample(shopCartExample);
++        
++        if (shopCartList == null || shopCartList.isEmpty()) {
++            throw new RuntimeException("购物车为空");
++        }
++        
++        for (ShopCart cart : shopCartList) {
++            Goods goods = goodsService.selectById(cart.getGoodsid());
++            if (goods == null) {
++                throw new RuntimeException("商品不存在");
++            }
++            if (goods.getNum() == null || goods.getNum() < cart.getGoodsnum()) {
++                throw new RuntimeException("商品 " + goods.getGoodsname() + " 库存不足，当前库存为 " + (goods.getNum() != null ? goods.getNum() : 0));
++            }
++        }
++        
++        Order order = new Order(null, userid, new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
++        insertOrder(order);
++        
++        for (ShopCart cart : shopCartList) {
++            OrderItem orderItem = new OrderItem(null, order.getOrderid(), cart.getGoodsid(), cart.getGoodsnum());
++            insertOrderItem(orderItem);
++            
++            boolean success = goodsService.decreaseStock(cart.getGoodsid(), cart.getGoodsnum());
++            if (!success) {
++                throw new RuntimeException("扣减库存失败");
++            }
++        }
++        
++        for (ShopCart cart : shopCartList) {
++            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(), cart.getGoodsid()));
++        }
++        
++        return order;
++    }
+ }
+diff --git a/SpringbootSchoolShop/src/main/resources/mapper/GoodsMapper.xml b/SpringbootSchoolShop/src/main/resources/mapper/GoodsMapper.xml
+index 3384d6e..69ec28c 100644
+--- a/SpringbootSchoolShop/src/main/resources/mapper/GoodsMapper.xml
++++ b/SpringbootSchoolShop/src/main/resources/mapper/GoodsMapper.xml
+@@ -339,4 +339,10 @@
+       activityId = #{activityid,jdbcType=INTEGER}
+     where goodsId = #{goodsid,jdbcType=INTEGER}
+   </update>
++  
++  <update id="decreaseStock">
++    update goods
++    set num = num - #{num}
++    where goodsId = #{goodsid} and num &gt;= #{num}
++  </update>
+ </mapper>
+\ No newline at end of file

@@ -29,4 +29,6 @@ public interface GoodsService {
     public void deleteFavByKey(FavoriteKey favoriteKey);
 
     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
+    
+    public boolean decreaseStock(Integer goodsid, Integer num);
 }

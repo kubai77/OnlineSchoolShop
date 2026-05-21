@@ -87,4 +87,10 @@ public class GoodsServiceImpl implements GoodsService {
     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
         return favoriteMapper.selectByExample(favoriteExample);
     }
+
+    @Override
+    public boolean decreaseStock(Integer goodsid, Integer num) {
+        int result = goodsMapper.decreaseStock(goodsid, num);
+        return result > 0;
+    }
 }
