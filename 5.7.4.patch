@@ -1,0 +1,193 @@
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+index 9fe5a50..938ea2a 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/controller/front/OrderController.java
+@@ -101,28 +101,12 @@ public class OrderController {
+     public Msg orderFinish(Float oldPrice, Float newPrice, Boolean isPay, Integer addressid, HttpSession session) {
+         User user = (User) session.getAttribute("user");
+ 
+-        //获取订单信息
+-        ShopCartExample shopCartExample = new ShopCartExample();
+-        shopCartExample.or().andUseridEqualTo(user.getUserid());
+-        List<ShopCart> shopCart = shopCartService.selectByExample(shopCartExample);
+-
+-        //删除购物车
+-        for (ShopCart cart : shopCart) {
+-            shopCartService.deleteByKey(new ShopCartKey(cart.getUserid(),cart.getGoodsid()));
++        try {
++            orderService.createOrder(user.getUserid(), oldPrice, newPrice, isPay, addressid);
++            return Msg.success("购买成功");
++        } catch (RuntimeException e) {
++            return Msg.fail(e.getMessage());
+         }
+-
+-        //把订单信息写入数据库
+-        Order order = new Order(null, user.getUserid(), new Date(), oldPrice, newPrice, isPay, false, false, false, addressid,null,null);
+-        orderService.insertOrder(order);
+-        //插入的订单号
+-        Integer orderId = order.getOrderid();
+-
+-        //把订单项写入orderitem表中
+-        for (ShopCart cart : shopCart) {
+-            orderService.insertOrderItem(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
+-        }
+-
+-        return Msg.success("购买成功");
+     }
+ 
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+index e761b80..840b4bd 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/dao/GoodsMapper.java
+@@ -36,4 +36,6 @@ public interface GoodsMapper {
+     int updateByPrimaryKey(Goods record);
+ 
+     List<Goods> selectByExampleWithBLOBsLimit(GoodsExample digGoodsExample);
++
++    int reduceStock(@Param("goodsid") Integer goodsid, @Param("num") Integer num);
+ }
+\ No newline at end of file
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+index 3cfb0aa..9206760 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/GoodsService.java
+@@ -29,4 +29,6 @@ public interface GoodsService {
+     public void deleteFavByKey(FavoriteKey favoriteKey);
+ 
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample);
++
++    public int reduceStock(Integer goodsid, Integer num);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+index 952d32a..21a33ed 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/OrderService.java
+@@ -24,4 +24,6 @@ public interface OrderService {
+     public Order selectByPrimaryKey(Integer orderid);
+ 
+     void insertOrderItem(OrderItem orderItem);
++
++    void createOrder(Integer userId, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid);
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+index 6c4958b..ca32400 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/GoodsServiceImpl.java
+@@ -87,4 +87,9 @@ public class GoodsServiceImpl implements GoodsService {
+     public List<Favorite> selectFavByExample(FavoriteExample favoriteExample) {
+         return favoriteMapper.selectByExample(favoriteExample);
+     }
++
++    @Override
++    public int reduceStock(Integer goodsid, Integer num) {
++        return goodsMapper.reduceStock(goodsid, num);
++    }
+ }
+diff --git a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+index eba2dbd..fe9930b 100644
+--- a/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
++++ b/ssmschoolshop/src/main/java/com/zhang/ssmschoolshop/service/impl/OrderServiceImpl.java
+@@ -4,11 +4,14 @@ package com.zhang.ssmschoolshop.service.impl;
+ import com.zhang.ssmschoolshop.dao.AddressMapper;
+ import com.zhang.ssmschoolshop.dao.OrderItemMapper;
+ import com.zhang.ssmschoolshop.dao.OrderMapper;
++import com.zhang.ssmschoolshop.dao.ShopCartMapper;
+ import com.zhang.ssmschoolshop.entity.*;
++import com.zhang.ssmschoolshop.service.GoodsService;
+ import com.zhang.ssmschoolshop.service.OrderService;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.stereotype.Service;
+ 
++import java.util.Date;
+ import java.util.List;
+ 
+ @Service("orderService")
+@@ -23,6 +26,12 @@ public class OrderServiceImpl implements OrderService {
+     @Autowired(required = false)
+     private AddressMapper addressMapper;
+ 
++    @Autowired(required = false)
++    private ShopCartMapper shopCartMapper;
++
++    @Autowired(required = false)
++    private GoodsService goodsService;
++
+     @Override
+     public void insertOrder(Order order) {
+         orderMapper.insertSelective(order);
+@@ -33,7 +42,6 @@ public class OrderServiceImpl implements OrderService {
+         orderMapper.deleteByPrimaryKey(orderid);
+     }
+ 
+-
+     @Override
+     public List<Order> selectOrderByExample(OrderExample orderExample) {
+         return orderMapper.selectByExample(orderExample);
+@@ -63,4 +71,30 @@ public class OrderServiceImpl implements OrderService {
+     public void insertOrderItem(OrderItem orderItem) {
+         orderItemMapper.insertSelective(orderItem);
+     }
++
++    @Override
++    public void createOrder(Integer userId, Float oldPrice, Float newPrice, Boolean isPay, Integer addressid) {
++        ShopCartExample shopCartExample = new ShopCartExample();
++        shopCartExample.or().andUseridEqualTo(userId);
++        List<ShopCart> shopCart = shopCartMapper.selectByExample(shopCartExample);
++
++        for (ShopCart cart : shopCart) {
++            int result = goodsService.reduceStock(cart.getGoodsid(), cart.getGoodsnum());
++            if (result == 0) {
++                Goods goods = goodsService.selectById(cart.getGoodsid());
++                String goodsName = goods != null ? goods.getGoodsname() : "ID=" + cart.getGoodsid();
++                throw new RuntimeException("商品 [" + goodsName + "] 库存不足，购买失败");
++            }
++        }
++
++        Order order = new Order(null, userId, new Date(), oldPrice, newPrice, isPay, false, false, false, addressid, null, null);
++        orderMapper.insertSelective(order);
++        Integer orderId = order.getOrderid();
++
++        for (ShopCart cart : shopCart) {
++            orderItemMapper.insertSelective(new OrderItem(null, orderId, cart.getGoodsid(), cart.getGoodsnum()));
++        }
++
++        shopCartMapper.deleteByExample(shopCartExample);
++    }
+ }
+diff --git a/ssmschoolshop/src/main/resources/mapper/GoodsMapper.xml b/ssmschoolshop/src/main/resources/mapper/GoodsMapper.xml
+index ffb0bfb..77378da 100644
+--- a/ssmschoolshop/src/main/resources/mapper/GoodsMapper.xml
++++ b/ssmschoolshop/src/main/resources/mapper/GoodsMapper.xml
+@@ -338,4 +338,10 @@
+       activityId = #{activityid,jdbcType=INTEGER}
+     where goodsId = #{goodsid,jdbcType=INTEGER}
+   </update>
++
++  <update id="reduceStock">
++    update goods
++    set num = num - #{num}
++    where goodsId = #{goodsid} and num >= #{num}
++  </update>
+ </mapper>
+\ No newline at end of file
+diff --git a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class b/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class
+deleted file mode 100644
+index 916673e..0000000
+Binary files a/ssmschoolshop/target/classes/com/zhang/ssmschoolshop/dao/GoodsMapper.class and /dev/null differ
+diff --git a/ssmschoolshop/target/classes/mapper/GoodsMapper.xml b/ssmschoolshop/target/classes/mapper/GoodsMapper.xml
+index ffb0bfb..77378da 100644
+--- a/ssmschoolshop/target/classes/mapper/GoodsMapper.xml
++++ b/ssmschoolshop/target/classes/mapper/GoodsMapper.xml
+@@ -338,4 +338,10 @@
+       activityId = #{activityid,jdbcType=INTEGER}
+     where goodsId = #{goodsid,jdbcType=INTEGER}
+   </update>
++
++  <update id="reduceStock">
++    update goods
++    set num = num - #{num}
++    where goodsId = #{goodsid} and num >= #{num}
++  </update>
+ </mapper>
+\ No newline at end of file

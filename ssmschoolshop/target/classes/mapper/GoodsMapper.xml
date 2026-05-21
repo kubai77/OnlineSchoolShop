@@ -338,4 +338,10 @@
       activityId = #{activityid,jdbcType=INTEGER}
     where goodsId = #{goodsid,jdbcType=INTEGER}
   </update>
+
+  <update id="reduceStock">
+    update goods
+    set num = num - #{num}
+    where goodsId = #{goodsid} and num >= #{num}
+  </update>
 </mapper>

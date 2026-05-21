@@ -36,4 +36,6 @@ public interface GoodsMapper {
     int updateByPrimaryKey(Goods record);
 
     List<Goods> selectByExampleWithBLOBsLimit(GoodsExample digGoodsExample);
+
+    int reduceStock(@Param("goodsid") Integer goodsid, @Param("num") Integer num);
 }
